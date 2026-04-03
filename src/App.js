@@ -1,20 +1,18 @@
-import axios from "axios";
 import { useEffect, useState } from "react";
+import axios from "axios";
+import ClientList from "./pages/client";
 
 function App() {
-  const [users, setUsers] = useState([]);
+  const [clients, setClients] = useState([]);
 
   useEffect(() => {
-    axios.get("http://localhost:5000/api/users")
-      .then(res => setUsers(res.data));
+    axios.get("http://localhost:5000/api/clients")
+      .then(res => setClients(res.data));
   }, []);
 
   return (
     <div>
-      <h1>Users</h1>
-      {users.map(u => (
-        <p key={u._id}>{u.name}</p>
-      ))}
+      <ClientList clients={clients} />
     </div>
   );
 }
