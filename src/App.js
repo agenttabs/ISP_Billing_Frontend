@@ -1,20 +1,50 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-import ClientList from "./pages/client";
+  import { useEffect, useState } from "react";
+  import axios from "axios";
 
-function App() {
-  const [clients, setClients] = useState([]);
+  import {
+    BrowserRouter as Router,
+    Routes,
+    Route
+  } from "react-router-dom";
 
-  useEffect(() => {
-    axios.get("http://localhost:5000/api/clients")
-      .then(res => setClients(res.data));
-  }, []);
 
-  return (
-    <div>
-      <ClientList clients={clients} />
-    </div>
-  );
-}
+  import AddClient from "./pages/addclient";
+  import EditClient from "./pages/editclient";
+  import Dashboard from "./pages/Dashboard";
 
-export default App;
+  import Billing from "./pages/Billing";
+  import Receipts from "./pages/Receipts";
+  import Layout from "./layout/Layout";
+  import ClientList from "./pages/client";
+
+  function App() {
+    
+    // ✅ define clients state
+    const [clients, setClients] = useState([]);
+
+    // ✅ load clients from backend
+    useEffect(() => {
+      axios
+        .get("http://localhost:5000/api/clients")
+        .then((res) => setClients(res.data))
+        .catch((err) => console.error(err));
+    }, []);
+
+    return (
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/clients" element={<ClientList />} />
+            <Route path="/addclient" element={<AddClient />} />
+            <Route path="/editclient/:id" element={<EditClient />} />
+            <Route path="/billing/:id" element={<div>Billing Page</div>} />
+            <Route path="/receipt/:id" element={<div>Receipt Page</div>} />
+          
+          </Routes>
+        </Layout>
+      </Router>
+    );
+  }
+
+  // ✅ VERY IMPORTANT
+  export default App;
