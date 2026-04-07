@@ -5,49 +5,74 @@ import {
   ListItemIcon,
   ListItemText,
   Badge,
-  Box
+  Box,
+  Tooltip,
+  IconButton
 } from "@mui/material";
+
+import {
+  Dashboard,
+  People,
+  Menu as MenuIcon
+} from "@mui/icons-material";
 
 import { Link, useLocation } from "react-router-dom";
 import { useClient } from "../context/client.context";
+import { useState } from "react";
 
-export default function Sidebar({ open }) {
+export default function Sidebar() {
   const location = useLocation();
   const { clients } = useClient();
-
-  // 🔴 LIVE UNPAID COUNT
+const [open, setOpen] = useState(false);
   const unpaidCount = clients.filter(
     (c) => (c.PaymentStatus || "").toUpperCase() !== "PAID"
   ).length;
 
   const menu = [
-    { text: "Dashboard",  path: "/" },
-    { text: "Clients",  path: "/clients" }
+    { text: "Dashboard", path: "/", icon: <Dashboard /> },
+    { text: "Clients", path: "/clients", icon: <People /> }
   ];
 
   return (
     <motion.div
-      animate={{ width: open ? 220 : 70 }}
-      transition={{ duration: 0.3 }}
+      animate={{ width: open ? 230 : 70 }}
+      transition={{ duration: 0.25 }}
       style={{
         height: "100vh",
-        background: "linear-gradient(180deg, #ffffff, #f1f5f9)",
+        backdropFilter: "blur(12px)",
+        background: "rgba(255,255,255,0.7)",
         borderRight: "1px solid rgba(0,0,0,0.05)",
-        boxShadow: "4px 0 20px rgba(0,0,0,0.08)", // 🔥 3D effect
+        boxShadow: "4px 0 25px rgba(0,0,0,0.08)",
         position: "relative",
         zIndex: 10
       }}
     >
-      {/* LOGO */}
-      <Box sx={{ p: 2, fontWeight: "bold", textAlign: "center" }}>
-        {open ? "ISP SYSTEM" : "ISP"}
+      {/* HEADER */}
+      <Box
+        sx={{
+          p: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: open ? "space-between" : "center"
+        }}
+      >
+        {open && (
+          <Box sx={{ fontWeight: "bold", fontSize: 16 }}>
+            ISP SYSTEM
+          </Box>
+        )}
+
+        <IconButton onClick={() => setOpen(!open)}>
+          <MenuIcon />
+        </IconButton>
       </Box>
 
+      {/* MENU */}
       <List>
         {menu.map((item) => {
           const active = location.pathname === item.path;
 
-          return (
+          const button = (
             <ListItemButton
               key={item.text}
               component={Link}
@@ -56,13 +81,34 @@ export default function Sidebar({ open }) {
                 mx: 1,
                 my: 0.5,
                 borderRadius: 2,
-                background: active ? "#e2e8f0" : "transparent",
+                position: "relative",
+                background: active ? "rgba(99,102,241,0.12)" : "transparent",
                 "&:hover": {
-                  background: "#e5e7eb"
+                  background: "rgba(0,0,0,0.05)"
                 }
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              {/* ACTIVE SIDE BAR */}
+              {active && (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    left: 0,
+                    top: 6,
+                    bottom: 6,
+                    width: 4,
+                    borderRadius: 2,
+                    background: "#6366f1"
+                  }}
+                />
+              )}
+
+              <ListItemIcon
+                sx={{
+                  minWidth: 40,
+                  color: active ? "#6366f1" : "#6b7280"
+                }}
+              >
                 {item.icon}
               </ListItemIcon>
 
@@ -75,15 +121,23 @@ export default function Sidebar({ open }) {
                 />
               )}
 
-              {/* 🔴 UNPAID BADGE */}
+              {/* UNPAID BADGE */}
               {item.text === "Clients" && unpaidCount > 0 && (
                 <Badge
                   badgeContent={unpaidCount}
                   color="error"
-                  sx={{ ml: 1 }}
+                  sx={{ mr: open ? 1 : 0 }}
                 />
               )}
             </ListItemButton>
+          );
+
+          return open ? (
+            button
+          ) : (
+            <Tooltip title={item.text} placement="right" key={item.text}>
+              {button}
+            </Tooltip>
           );
         })}
       </List>
