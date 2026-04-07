@@ -46,5 +46,4 @@
     );
   }
 
-  // ✅ VERY IMPORTANT
   export default App;
