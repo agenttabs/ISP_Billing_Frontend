@@ -17,7 +17,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Card
 } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
@@ -370,7 +371,9 @@ function ClientList() {
       />
 
       {loading && <p>Loading...</p>}
-
+    <Card
+    elevation={10}
+    >
       {/* TABLE */}
       <TableContainer
         component={Paper}
@@ -467,7 +470,7 @@ function ClientList() {
                     <Tooltip title="Update">
                       <IconButton
                         sx={{
-                          "&:hover": { color: "#1976d2" }
+                          "&:hover": { color: "#d37014" },color: "#d37014"
                         }}
                         onClick={() => {
                           setEditMode(true);
@@ -493,7 +496,7 @@ function ClientList() {
                     <Tooltip title="Billing">
                       <IconButton
                         sx={{
-                          "&:hover": { color: "#0288d1" }
+                          "&:hover": { color: "#0288d1" }, color: "#0288d1"
                         }}
                         onClick={() => navigate(`/billing/${c._id}`)}
                       >
@@ -504,7 +507,7 @@ function ClientList() {
                     <Tooltip title="Pay">
                       <IconButton
                         sx={{
-                          "&:hover": { color: "#2e7d32" }
+                          "&:hover": { color: "#2e7d32" }, color: "#2e7d32"
                         }}
                         onClick={() => handleOpenPaymentModal(c)}
                       >
@@ -515,7 +518,7 @@ function ClientList() {
                     <Tooltip title="Router">
                       <IconButton
                         sx={{
-                          "&:hover": { color: "#6a1b9a" }
+                          "&:hover": { color: "#ce8dfa" }, color: "#6a1b9a"
                         }}
                         onClick={() => navigate(`/mikrotik/${c._id}`)}
                       >
@@ -543,7 +546,7 @@ function ClientList() {
           setRowsPerPage(parseInt(e.target.value, 10))
         }
       />
-
+</Card> 
       {/* MENU */}
       <Menu
         open={menu !== null}
