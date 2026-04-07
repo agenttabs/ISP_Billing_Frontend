@@ -57,7 +57,15 @@ function ClientList() {
   const [selectedClient, setSelectedClient] = useState(null);
 
   const [openModal, setOpenModal] = useState(false);
+  const [openPaymentModal, setOpenPaymentModal] = useState(false);
   const [newClient, setNewClient] = useState({});
+  const [paymentForm, setPaymentForm] = useState({
+    AmountPaid: "",
+    PaymentDate: new Date().toISOString().split("T")[0],
+    PaymentMethod: "CASH",
+    ReferenceNumber: "",
+    Notes: ""
+  });
 
   useEffect(() => {
     fetchClients();
@@ -120,6 +128,31 @@ function ClientList() {
   const handleReceipt = () => {
     navigate(`/receipt/${selectedClient._id}`);
     handleClose();
+  };
+
+  const handleOpenPaymentModal = (client) => {
+    setSelectedClient(client);
+    setPaymentForm({
+      AmountPaid: String(client.Balance ?? client.AmountDue ?? ""),
+      PaymentDate: new Date().toISOString().split("T")[0],
+      PaymentMethod: "CASH",
+      ReferenceNumber: "",
+      Notes: ""
+    });
+    setOpenPaymentModal(true);
+  };
+
+  const handlePaymentChange = (e) => {
+    const { name, value } = e.target;
+
+    if (name === "AmountPaid" && !/^\d*\.?\d*$/.test(value)) {
+      return;
+    }
+
+    setPaymentForm((prev) => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   // INPUT
@@ -232,6 +265,16 @@ function ClientList() {
     setNewClient({});
   };
 
+  const resetPaymentForm = () => {
+    setPaymentForm({
+      AmountPaid: "",
+      PaymentDate: new Date().toISOString().split("T")[0],
+      PaymentMethod: "CASH",
+      ReferenceNumber: "",
+      Notes: ""
+    });
+  };
+
 
   const handleCloseModal = (event, reason) => {
     if (reason === "backdropClick") return;
@@ -241,8 +284,68 @@ function ClientList() {
     resetForm();
   };
 
+  const handleClosePaymentModal = (event, reason) => {
+    if (reason === "backdropClick") return;
+
+    setOpenPaymentModal(false);
+    resetPaymentForm();
+  };
+
+  const handleSavePayment = async () => {
+    const currentBalance = Number(selectedClient?.Balance ?? selectedClient?.AmountDue ?? 0);
+    const amountPaid = Number(paymentForm.AmountPaid);
+
+    if (!selectedClient?._id) {
+      alert("Please select a client first");
+      return;
+    }
+
+    if (!amountPaid || amountPaid <= 0) {
+      alert("Please enter a valid payment amount");
+      return;
+    }
+
+    if (amountPaid > currentBalance) {
+      alert("Payment cannot be greater than the current balance");
+      return;
+    }
+
+    try {
+      const balance = Math.max(currentBalance - amountPaid, 0);
+      const existingNote = selectedClient.Note ? `${selectedClient.Note}\n` : "";
+      const paymentNote = paymentForm.Notes
+        ? `${existingNote}Payment ${paymentForm.PaymentDate}: ${paymentForm.Notes}`
+        : selectedClient.Note || "";
+
+      await axios.put(
+        `http://localhost:5000/api/clients/${selectedClient._id}`,
+        {
+          ...selectedClient,
+          AmountPaid: amountPaid,
+          Balance: balance,
+          PaymentDate: paymentForm.PaymentDate,
+          PaymentMethod: paymentForm.PaymentMethod,
+          ReferenceNumber: paymentForm.ReferenceNumber,
+          PaymentStatus: balance === 0 ? "PAID" : "PARTIAL",
+          Note: paymentNote
+        }
+      );
+
+      fetchClients();
+      handleClosePaymentModal();
+    } catch (err) {
+      console.error("PAYMENT ERROR:", err.response?.data || err.message);
+      alert("Failed to save payment");
+    }
+  };
+
 
   const [editMode, setEditMode] = useState(false);
+  const currentPaymentBalance = Number(selectedClient?.Balance ?? selectedClient?.AmountDue ?? 0);
+  const projectedBalance = Math.max(
+    currentPaymentBalance - Number(paymentForm.AmountPaid || 0),
+    0
+  );
 
 
   return (
@@ -403,7 +506,7 @@ function ClientList() {
                         sx={{
                           "&:hover": { color: "#2e7d32" }
                         }}
-                        onClick={() => navigate(`/payment/${c._id}`)}
+                        onClick={() => handleOpenPaymentModal(c)}
                       >
                         <PaymentIcon />
                       </IconButton>
@@ -689,6 +792,177 @@ function ClientList() {
             }}
           >
             Save Client
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openPaymentModal}
+        onClose={handleClosePaymentModal}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden"
+          }
+        }}
+      >
+        <Box
+          sx={{
+            background: "linear-gradient(90deg, #2e7d32, #43a047)",
+            color: "#fff",
+            px: 3,
+            py: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <PaymentIcon />
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              Payment Acceptance
+            </Typography>
+          </Box>
+
+          <IconButton onClick={handleClosePaymentModal} sx={{ color: "#fff" }}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <DialogContent sx={{ p: 3 }}>
+          <Typography sx={{ fontWeight: "bold", mb: 2 }}>
+            Client Summary
+          </Typography>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 2,
+              mb: 3
+            }}
+          >
+            <TextField
+              label="Client Name"
+              value={selectedClient?.ClientName || ""}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+
+            <TextField
+              label="Account Name"
+              value={selectedClient?.AccountName || ""}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+
+            <TextField
+              label="Current Balance"
+              value={currentPaymentBalance}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+
+            <TextField
+              label="Plan"
+              value={selectedClient?.NetPlan || ""}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+          </Box>
+
+          <Typography sx={{ fontWeight: "bold", mb: 1 }}>
+            Payment Details
+          </Typography>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+            <TextField
+              label="Amount Paid"
+              name="AmountPaid"
+              fullWidth
+              value={paymentForm.AmountPaid}
+              onChange={handlePaymentChange}
+            />
+
+            <TextField
+              type="date"
+              label="Payment Date"
+              name="PaymentDate"
+              fullWidth
+              value={paymentForm.PaymentDate}
+              onChange={handlePaymentChange}
+              InputLabelProps={{ shrink: true }}
+            />
+
+            <TextField
+              select
+              label="Payment Method"
+              name="PaymentMethod"
+              fullWidth
+              value={paymentForm.PaymentMethod}
+              onChange={handlePaymentChange}
+            >
+              <MenuItem value="CASH">Cash</MenuItem>
+              <MenuItem value="GCASH">GCash</MenuItem>
+              <MenuItem value="BANK">Bank Transfer</MenuItem>
+            </TextField>
+
+            <TextField
+              label="Reference Number"
+              name="ReferenceNumber"
+              fullWidth
+              value={paymentForm.ReferenceNumber}
+              onChange={handlePaymentChange}
+            />
+          </Box>
+
+          <TextField
+            label="Payment Notes"
+            name="Notes"
+            fullWidth
+            multiline
+            rows={3}
+            sx={{ mt: 2 }}
+            value={paymentForm.Notes}
+            onChange={handlePaymentChange}
+          />
+
+          <Box
+            sx={{
+              mt: 3,
+              p: 2,
+              borderRadius: 2,
+              backgroundColor: "#f5f5f5",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}
+          >
+            <Typography sx={{ fontWeight: "bold" }}>
+              Remaining Balance
+            </Typography>
+            <Typography
+              sx={{
+                fontWeight: "bold",
+                color: projectedBalance === 0 ? "#2e7d32" : "#ed6c02"
+              }}
+            >
+              ₱{projectedBalance}
+            </Typography>
+          </Box>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleClosePaymentModal}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleSavePayment}
+            sx={{ px: 4, fontWeight: "bold" }}
+          >
+            Save Payment
           </Button>
         </DialogActions>
       </Dialog>
