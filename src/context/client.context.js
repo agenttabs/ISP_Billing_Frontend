@@ -15,7 +15,7 @@ export const ClientProvider = ({ children }) => {
       const res = await axios.get("http://localhost:5000/api/clients");
 
       console.log("✅ FETCHED CLIENTS:", res.data); // DEBUG
-
+      console.log("Payment", res.data.PaymentStatus)
       setClients(res.data || []);
     } catch (err) {
       console.error("❌ FETCH ERROR:", err);

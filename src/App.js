@@ -16,6 +16,7 @@
   import Receipts from "./pages/Receipts";
   import Layout from "./layout/Layout";
   import ClientList from "./pages/client";
+import ClientMapPage from "./pages/map/client.address.map";
 
   function App() {
     
@@ -39,7 +40,9 @@
             <Route path="/editclient/:id" element={<EditClient />} />
             <Route path="/billing/:id" element={<div>Billing Page</div>} />
             <Route path="/receipt/:id" element={<div>Receipt Page</div>} />
-          
+            <Route path="/map" element={<ClientMapPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+
           </Routes>
         </Layout>
       </Router>
