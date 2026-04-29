@@ -1,5 +1,8 @@
 import { motion } from "framer-motion";
 import {
+  Avatar,
+  Collapse,
+  Divider,
   List,
   ListItemButton,
   ListItemIcon,
@@ -7,31 +10,326 @@ import {
   Badge,
   Box,
   Tooltip,
-  IconButton
+  IconButton,
+  Typography
 } from "@mui/material";
 
 import {
   Dashboard,
   People,
-  Menu as MenuIcon
+  Menu as MenuIcon,
+  AssessmentOutlined,
+  BuildCircleOutlined,
+  LogoutOutlined,
+  ManageAccountsOutlined,
+  SmsOutlined,
+  MiscellaneousServicesOutlined,
+  ScheduleSendOutlined,
+  EmailOutlined,
+  PrintOutlined,
+  PowerSettingsNewOutlined,
+  ReceiptLongOutlined,
+  FactCheckOutlined,
+  RouterOutlined,
+  ShieldOutlined,
+  SettingsSuggestOutlined,
+  FmdGoodOutlined,
+  HistoryOutlined,
+  ExpandLess,
+  ExpandMore
 } from "@mui/icons-material";
 
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useClient } from "../context/client.context";
 import { useState } from "react";
+import { useAuth } from "../context/auth.context";
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { clients } = useClient();
-const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(true);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const unpaidCount = clients.filter(
     (c) => (c.PaymentStatus || "").toUpperCase() !== "PAID"
   ).length;
+  const userType = String(user?.type || "").toUpperCase();
 
-  const menu = [
-    { text: "Dashboard", path: "/", icon: <Dashboard /> },
-    { text: "Clients", path: "/clients", icon: <People /> }
-  ];
+  const mainMenu = [
+    { text: "Dashboard", path: "/", icon: <Dashboard />, roles: ["ADMIN", "CASHIER", "TECHNICIAN"] },
+    { text: "Clients", path: "/clients", icon: <People />, roles: ["ADMIN", "CASHIER"] }
+  ].filter((item) => item.roles.includes(userType));
+
+  const reportMenu = [
+    {
+      text: "Collection",
+      path: "/reports/transactions",
+      icon: <AssessmentOutlined />,
+      roles: ["ADMIN", "CASHIER"]
+    },
+    {
+      text: "Expenses and Earnings",
+      path: "/reports/expenses-and-earnings",
+      icon: <ReceiptLongOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Audit",
+      path: "/reports/audit-logs",
+      icon: <HistoryOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Tech Report",
+      path: "/reports/tech-report",
+      icon: <BuildCircleOutlined />,
+      roles: ["ADMIN", "TECHNICIAN"]
+    },
+    {
+      text: "Repair",
+      path: "/repair-information",
+      icon: <BuildCircleOutlined />,
+      roles: ["ADMIN", "TECHNICIAN"]
+    }
+  ].filter((item) => item.roles.includes(userType));
+
+  const serviceMenu = [
+    {
+      text: "Account Users",
+      path: "/account-users",
+      icon: <ManageAccountsOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "SMS Template",
+      path: "/sms-recepients",
+      icon: <SmsOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "SMS Batch Program",
+      path: "/sms-batch-programs",
+      icon: <ScheduleSendOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Email Notification",
+      path: "/email-notification",
+      icon: <EmailOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Netplan",
+      path: "/netplans-maintenance",
+      icon: <RouterOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Expenses Input",
+      path: "/expense-input",
+      icon: <ReceiptLongOutlined />,
+      roles: ["ADMIN", "CASHIER"]
+    },
+    {
+      text: "Print Receipt",
+      path: "/print-receipt",
+      icon: <PrintOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Client Bypass",
+      path: "/client-bypass",
+      icon: <ShieldOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Mikrotik Checker",
+      path: "/mikrotik-checker",
+      icon: <RouterOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Mikrotik DC Batch",
+      path: "/mikrotik-dc-batch",
+      icon: <ScheduleSendOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Mikrotik Due Disconnect",
+      path: "/mikrotik-due-disconnect-batch",
+      icon: <PowerSettingsNewOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "NAP",
+      path: "/nap",
+      icon: <FmdGoodOutlined />,
+      roles: ["ADMIN", "TECHNICIAN"]
+    },
+    {
+      text: "Transaction Verification",
+      path: "/transaction-verification",
+      icon: <FactCheckOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "System Diagnostics",
+      path: "/system-diagnostics",
+      icon: <SettingsSuggestOutlined />,
+      roles: ["ADMIN"]
+    }
+  ].filter((item) => item.roles.includes(userType));
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
+  const renderMenuButton = (item) => {
+    const active = location.pathname === item.path;
+
+    return (
+      <ListItemButton
+        key={item.text}
+        component={Link}
+        to={item.path}
+        sx={{
+          mx: 1,
+          my: 0.5,
+          borderRadius: 2,
+          position: "relative",
+          background: active ? "rgba(99,102,241,0.12)" : "transparent",
+          "&:hover": {
+            background: "rgba(0,0,0,0.05)"
+          }
+        }}
+      >
+        {active && (
+          <Box
+            sx={{
+              position: "absolute",
+              left: 0,
+              top: 6,
+              bottom: 6,
+              width: 4,
+              borderRadius: 2,
+              background: "#6366f1"
+            }}
+          />
+        )}
+
+        <ListItemIcon
+          sx={{
+            minWidth: 40,
+            color: active ? "#6366f1" : "#6b7280"
+          }}
+        >
+          {item.icon}
+        </ListItemIcon>
+
+        {open && (
+          <ListItemText
+            primary={item.text}
+            primaryTypographyProps={{
+              fontWeight: active ? 600 : 500
+            }}
+          />
+        )}
+
+        {item.text === "Clients" && unpaidCount > 0 && (
+          <Badge
+            badgeContent={unpaidCount}
+            color="error"
+            sx={{ mr: open ? 1 : 0 }}
+          />
+        )}
+      </ListItemButton>
+    );
+  };
+
+  const logoutButton = (
+    <ListItemButton
+      onClick={handleLogout}
+      sx={{
+        mx: 1,
+        mt: 1,
+        borderRadius: 2,
+        color: "#b91c1c",
+        "&:hover": {
+          background: "rgba(185,28,28,0.08)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 40, color: "#b91c1c" }}>
+        <LogoutOutlined />
+      </ListItemIcon>
+      {open && <ListItemText primary="Sign out" />}
+    </ListItemButton>
+  );
+
+  const servicesButton = (
+    <ListItemButton
+      onClick={() => setServicesOpen((prev) => !prev)}
+      sx={{
+        mx: 1,
+        my: 0.5,
+        borderRadius: 2,
+        color: "#475569",
+        "&:hover": {
+          background: "rgba(0,0,0,0.05)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 40, color: "#64748b" }}>
+        <MiscellaneousServicesOutlined />
+      </ListItemIcon>
+
+      {open ? (
+        <>
+          <ListItemText
+            primary="Services"
+            primaryTypographyProps={{
+              fontWeight: 700
+            }}
+          />
+          {servicesOpen ? <ExpandLess /> : <ExpandMore />}
+        </>
+      ) : null}
+    </ListItemButton>
+  );
+
+  const reportsButton = (
+    <ListItemButton
+      onClick={() => setReportsOpen((prev) => !prev)}
+      sx={{
+        mx: 1,
+        my: 0.5,
+        borderRadius: 2,
+        color: "#475569",
+        "&:hover": {
+          background: "rgba(0,0,0,0.05)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 40, color: "#64748b" }}>
+        <AssessmentOutlined />
+      </ListItemIcon>
+
+      {open ? (
+        <>
+          <ListItemText
+            primary="Report"
+            primaryTypographyProps={{
+              fontWeight: 700
+            }}
+          />
+          {reportsOpen ? <ExpandLess /> : <ExpandMore />}
+        </>
+      ) : null}
+    </ListItemButton>
+  );
 
   return (
     <motion.div
@@ -39,6 +337,8 @@ const [open, setOpen] = useState(false);
       transition={{ duration: 0.25 }}
       style={{
         height: "100vh",
+        display: "flex",
+        flexDirection: "column",
         backdropFilter: "blur(12px)",
         background: "rgba(255,255,255,0.7)",
         borderRight: "1px solid rgba(0,0,0,0.05)",
@@ -68,79 +368,120 @@ const [open, setOpen] = useState(false);
       </Box>
 
       {/* MENU */}
-      <List>
-        {menu.map((item) => {
-          const active = location.pathname === item.path;
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          pb: 1,
+          "&::-webkit-scrollbar": {
+            width: 8
+          },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: "rgba(148,163,184,0.55)",
+            borderRadius: 999
+          }
+        }}
+      >
+        <List>
+          {mainMenu.map((item) => {
+            const button = renderMenuButton(item);
 
-          const button = (
-            <ListItemButton
-              key={item.text}
-              component={Link}
-              to={item.path}
-              sx={{
-                mx: 1,
-                my: 0.5,
-                borderRadius: 2,
-                position: "relative",
-                background: active ? "rgba(99,102,241,0.12)" : "transparent",
-                "&:hover": {
-                  background: "rgba(0,0,0,0.05)"
-                }
-              }}
-            >
-              {/* ACTIVE SIDE BAR */}
-              {active && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    left: 0,
-                    top: 6,
-                    bottom: 6,
-                    width: 4,
-                    borderRadius: 2,
-                    background: "#6366f1"
-                  }}
-                />
+            return open ? (
+              button
+            ) : (
+              <Tooltip title={item.text} placement="right" key={item.text}>
+                {button}
+              </Tooltip>
+            );
+          })}
+
+          {reportMenu.length > 0 ? (
+            <>
+              {open ? (
+                reportsButton
+              ) : (
+                <Tooltip title="Report" placement="right">
+                  {reportsButton}
+                </Tooltip>
               )}
 
-              <ListItemIcon
-                sx={{
-                  minWidth: 40,
-                  color: active ? "#6366f1" : "#6b7280"
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
+              <Collapse in={reportsOpen} timeout="auto" unmountOnExit>
+                {reportMenu.map((item) => {
+                  const button = renderMenuButton(item);
 
-              {open && (
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{
-                    fontWeight: active ? 600 : 500
-                  }}
-                />
+                  return open ? (
+                    <Box key={item.text} sx={{ pl: 1.5 }}>
+                      {button}
+                    </Box>
+                  ) : (
+                    <Tooltip title={item.text} placement="right" key={item.text}>
+                      {button}
+                    </Tooltip>
+                  );
+                })}
+              </Collapse>
+            </>
+          ) : null}
+
+          {serviceMenu.length > 0 ? (
+            <>
+              {open ? (
+                servicesButton
+              ) : (
+                <Tooltip title="Services" placement="right">
+                  {servicesButton}
+                </Tooltip>
               )}
 
-              {/* UNPAID BADGE */}
-              {item.text === "Clients" && unpaidCount > 0 && (
-                <Badge
-                  badgeContent={unpaidCount}
-                  color="error"
-                  sx={{ mr: open ? 1 : 0 }}
-                />
-              )}
-            </ListItemButton>
-          );
+              <Collapse in={servicesOpen} timeout="auto" unmountOnExit>
+                {serviceMenu.map((item) => {
+                  const button = renderMenuButton(item);
 
-          return open ? (
-            button
-          ) : (
-            <Tooltip title={item.text} placement="right" key={item.text}>
-              {button}
-            </Tooltip>
-          );
-        })}
-      </List>
+                  return open ? (
+                    <Box key={item.text} sx={{ pl: 1.5 }}>
+                      {button}
+                    </Box>
+                  ) : (
+                    <Tooltip title={item.text} placement="right" key={item.text}>
+                      {button}
+                    </Tooltip>
+                  );
+                })}
+              </Collapse>
+            </>
+          ) : null}
+        </List>
+      </Box>
+
+      <Box sx={{ mt: "auto", px: 1, pb: 2 }}>
+        <Divider sx={{ mb: 1.5 }} />
+        <Box
+          sx={{
+            px: open ? 1.5 : 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: open ? "flex-start" : "center",
+            gap: 1.5
+          }}
+        >
+          <Avatar sx={{ bgcolor: "#1d4ed8", width: 36, height: 36 }}>
+            {String(user?.name || user?.username || "U").charAt(0).toUpperCase()}
+          </Avatar>
+          {open ? (
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: 14 }} noWrap>
+                {user?.name || user?.username}
+              </Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 12 }} noWrap>
+                {user?.type || "USER"}
+              </Typography>
+            </Box>
+          ) : null}
+        </Box>
+        {open ? logoutButton : <Tooltip title="Sign out">{logoutButton}</Tooltip>}
+      </Box>
     </motion.div>
   );
 }

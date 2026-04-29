@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useCallback } from "react";
-import axios from "axios";
+import API from "../api/api";
 
 const ClientContext = createContext();
 
@@ -12,7 +12,7 @@ export const ClientProvider = ({ children }) => {
     try {
       setLoading(true);
 
-      const res = await axios.get("http://localhost:5000/api/clients");
+      const res = await API.get("/clients");
 
       console.log("✅ FETCHED CLIENTS:", res.data); // DEBUG
 
@@ -27,10 +27,7 @@ export const ClientProvider = ({ children }) => {
   // ADD CLIENT
   const addClient = async (clientData) => {
     try {
-      const res = await axios.post(
-        "http://localhost:5000/api/clients",
-        clientData
-      );
+      const res = await API.post("/clients", clientData);
 
       console.log("✅ ADDED CLIENT:", res.data);
 
