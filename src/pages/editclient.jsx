@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import {
   Box, TextField, Button, Typography, Paper, Grid, MenuItem
 } from "@mui/material";
@@ -9,6 +8,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
+import API from "../api/api";
 
 function EditClient() {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ function EditClient() {
   });
 
   useEffect(() => {
-    axios.get(`http://localhost:5000/api/clients/${id}`)
+    API.get(`/clients/${id}`)
       .then(res => {
         const d = res.data;
 
@@ -50,7 +50,7 @@ function EditClient() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    await axios.put(`http://localhost:5000/api/clients/${id}`, {
+    await API.put(`/clients/${id}`, {
       ...form,
       dueDate: form.dueDate?.toISOString(),
       amountDue: Number(form.amountDue)

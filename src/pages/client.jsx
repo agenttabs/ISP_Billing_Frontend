@@ -956,7 +956,7 @@ function ClientList() {
 
   const refreshDhcpLeaseComments = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/dhcp-leases-all");
+      const res = await API.get("/dhcp-leases-all");
       setDhcpLeaseComments(res.data || []);
     } catch (err) {
       console.error("DHCP LEASE COMMENT FETCH ERROR:", err);
@@ -982,8 +982,8 @@ function ClientList() {
   }, [fetchClients]);
 
   useEffect(() => {
-    axios
-      .get("http://localhost:5000/api/netplans")
+    API
+      .get("/netplans")
       .then((res) => setNetPlans(res.data))
       .catch((err) => console.error(err));
   }, []);
@@ -1030,7 +1030,7 @@ function ClientList() {
       setLoadingDhcpLeases(true);
 
       try {
-        const res = await axios.get("http://localhost:5000/api/dhcp-leases");
+        const res = await API.get("/dhcp-leases");
 
         if (!isActive) return;
 
@@ -1440,7 +1440,7 @@ function ClientList() {
       setPaymentHistoryLoading(true);
       setPaymentHistoryError("");
 
-      const { data } = await axios.get("http://localhost:5000/api/transactions", {
+      const { data } = await API.get("/transactions", {
         params: {
           accountNumber: client.AccountNumber || ""
         }
@@ -2204,8 +2204,8 @@ function ClientList() {
       };
       delete payload.macAddress;
 
-      await axios.put(
-        `http://localhost:5000/api/clients/${selectedClient._id}`,
+      await API.put(
+        `/clients/${selectedClient._id}`,
         payload
       );
 
@@ -2259,8 +2259,8 @@ function ClientList() {
         Note: existingNote ? `${existingNote}\n${pullOutNote}` : pullOutNote
       };
 
-      await axios.put(
-        `http://localhost:5000/api/clients/${selectedClient._id}`,
+      await API.put(
+        `/clients/${selectedClient._id}`,
         payload
       );
 
@@ -2763,14 +2763,14 @@ function ClientList() {
         updatedAt: transactionDateTime
       };
 
-      await axios.post("http://localhost:5000/api/earnings", earningPayload);
-      await axios.post(
-        "http://localhost:5000/api/transactions",
+      await API.post("/earnings", earningPayload);
+      await API.post(
+        "/transactions",
         transactionPayload
       );
 
-      await axios.put(
-        `http://localhost:5000/api/clients/${selectedClient._id}`,
+      await API.put(
+        `/clients/${selectedClient._id}`,
         {
           ...selectedClient,
           ContactNumber: paymentForm.ContactNumber,

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import {
   Box,
   TextField,
@@ -15,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import API from "../api/api";
 
 function AddClient() {
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ function AddClient() {
 
   // ✅ LOAD NETPLAN
   useEffect(() => {
-    axios.get("http://localhost:5000/api/netplans")
+    API.get("/netplans")
       .then(res => setNetplans(res.data))
       .catch(err => console.error(err));
   }, []);
@@ -63,7 +63,7 @@ function AddClient() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    await axios.post("http://localhost:5000/api/clients", {
+    await API.post("/clients", {
       ...form,
       DueDate: form.DueDate?.toISOString()
     });

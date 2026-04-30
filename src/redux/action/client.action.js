@@ -1,11 +1,11 @@
-import axios from "axios";
+import API from "../../api/api";
 
 // GET CLIENTS
 export const fetchClients = () => async (dispatch) => {
   try {
     dispatch({ type: "CLIENT_LIST_REQUEST" });
 
-    const { data } = await axios.get("http://localhost:5000/api/clients");
+    const { data } = await API.get("/clients");
 
     dispatch({
       type: "CLIENT_LIST_SUCCESS",
@@ -24,10 +24,7 @@ export const addClient = (clientData) => async (dispatch) => {
   try {
     dispatch({ type: "CLIENT_CREATE_REQUEST" });
 
-    const { data } = await axios.post(
-      "http://localhost:5000/api/clients",
-      clientData
-    );
+    const { data } = await API.post("/clients", clientData);
 
     dispatch({
       type: "CLIENT_CREATE_SUCCESS",
