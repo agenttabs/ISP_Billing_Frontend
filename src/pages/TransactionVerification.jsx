@@ -871,6 +871,7 @@ export default function TransactionVerification() {
                 <TableCell>Method</TableCell>
                 <TableCell>Amount</TableCell>
                 <TableCell>GCash Ref</TableCell>
+                <TableCell>Transfer Date</TableCell>
                 <TableCell>Receipt No.</TableCell>
                 <TableCell>Transaction Date</TableCell>
                 <TableCell>Status</TableCell>
@@ -880,7 +881,7 @@ export default function TransactionVerification() {
             <TableBody>
               {!records.length ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 4, color: "#64748b" }}>
+                  <TableCell colSpan={11} align="center" sx={{ py: 4, color: "#64748b" }}>
                     {loading ? "Loading records..." : "No pending non-cash transactions found."}
                   </TableCell>
                 </TableRow>
@@ -919,6 +920,7 @@ export default function TransactionVerification() {
                       <TableCell>{record.VerificationMethod || record.PaymentMethod || "-"}</TableCell>
                       <TableCell>{formatCurrency(record.VerificationAmount ?? record.TotalAmount)}</TableCell>
                       <TableCell>{record.VerificationReference || record.MOPRef || record.MatchReference || "-"}</TableCell>
+                      <TableCell>{record.VerificationTransferDate || record.TransferDate || record.GCashTransferDate || "-"}</TableCell>
                       <TableCell>{record.PaymentReceipt || record.Invoice || "-"}</TableCell>
                       <TableCell>{formatDateTime(record.TransactionDate || record.PaymentDate)}</TableCell>
                       <TableCell>

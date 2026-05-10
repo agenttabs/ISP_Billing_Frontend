@@ -254,6 +254,7 @@ export default function ReportTransactions() {
               <TableHead>
                 <TableRow>
                     <TableCell>Transaction Date</TableCell>
+                    <TableCell>Transfer Date</TableCell>
                     <TableCell>Created</TableCell>
                     <TableCell>Account Name</TableCell>
                     <TableCell>Client Name</TableCell>
@@ -265,13 +266,13 @@ export default function ReportTransactions() {
               <TableBody>
                 {shouldWaitForAdminDateRange ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={8} align="center">
                       Select a date range to view earnings.
                     </TableCell>
                   </TableRow>
                 ) : filteredRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={8} align="center">
                       No earnings found.
                     </TableCell>
                   </TableRow>
@@ -283,6 +284,7 @@ export default function ReportTransactions() {
                           ? new Date(row.TransactionDate).toLocaleString("en-PH")
                           : "-"}
                       </TableCell>
+                      <TableCell>{row.TransferDate || row.GCashTransferDate || "-"}</TableCell>
                       <TableCell>{row.DeclaredBy || row.CreatedBy || row.CreatedById || "-"}</TableCell>
                       <TableCell>{row.AccountName || "-"}</TableCell>
                       <TableCell>{row.Item || row.ClientName || "-"}</TableCell>

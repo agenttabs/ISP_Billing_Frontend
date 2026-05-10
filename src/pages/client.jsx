@@ -86,6 +86,7 @@ const createPaymentEntry = (overrides = {}) => ({
   amount: "",
   reference: "",
   receiptAmount: "",
+  transferDate: "",
   ...overrides
 });
 
@@ -1963,6 +1964,27 @@ function ClientList() {
     return moneyMatches[0] || "";
   };
 
+  const extractTransferDate = (text) => {
+    const cleaned = String(text || "").replace(/\r/g, " ").replace(/\n/g, " ");
+    const monthNameMatch = cleaned.match(
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
+    );
+
+    if (monthNameMatch?.[0]) {
+      return String(monthNameMatch[0]).replace(/\s+/g, " ").trim();
+    }
+
+    const slashDateTimeMatch = cleaned.match(
+      /\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
+    );
+
+    if (slashDateTimeMatch?.[0]) {
+      return String(slashDateTimeMatch[0]).replace(/\s+/g, " ").trim();
+    }
+
+    return "";
+  };
+
   const detectPaymentMethodFromText = (text) => {
     const normalized = text.toLowerCase();
 
@@ -1997,6 +2019,7 @@ function ClientList() {
       const ocrText = result.data.text || "";
       const extractedRef = extractReferenceNumber(ocrText);
       const extractedAmount = extractAmount(ocrText);
+      const extractedTransferDate = extractTransferDate(ocrText);
       const detectedMethod = detectPaymentMethodFromText(ocrText);
       const normalizedExtractedRef = String(extractedRef || "").trim().toUpperCase();
 
@@ -2054,12 +2077,13 @@ function ClientList() {
           method: detectedMethod,
           amount: extractedAmount || next[nextIndex].amount,
           reference: extractedRef || next[nextIndex].reference,
-          receiptAmount: extractedAmount || next[nextIndex].receiptAmount
+          receiptAmount: extractedAmount || next[nextIndex].receiptAmount,
+          transferDate: extractedTransferDate || next[nextIndex].transferDate
         };
         return next;
       });
 
-      if (extractedRef || extractedAmount) {
+      if (extractedRef || extractedAmount || extractedTransferDate) {
         const messageParts = [];
 
         if (detectedMethod) {
@@ -2070,6 +2094,9 @@ function ClientList() {
         }
         if (extractedAmount) {
           messageParts.push(`Amount: ${extractedAmount}`);
+        }
+        if (extractedTransferDate) {
+          messageParts.push(`Transfer Date: ${extractedTransferDate}`);
         }
 
         setOcrMessage(messageParts.join(" | "));
@@ -2844,8 +2871,13 @@ function ClientList() {
       Method: entry.method,
       Amount: entry.amount,
       Reference: entry.method === "CASH" ? "" : entry.reference,
-      ReceiptAmount: entry.method === "CASH" ? entry.amount : entry.receiptAmount || entry.amount
+      ReceiptAmount: entry.method === "CASH" ? entry.amount : entry.receiptAmount || entry.amount,
+      TransferDate: entry.method === "CASH" ? "" : String(entry.transferDate || "").trim()
     }));
+    const topLevelTransferDate =
+      normalizedPaymentEntries.find(
+        (entry) => entry.method !== "CASH" && String(entry.transferDate || "").trim()
+      )?.transferDate || "";
 
     if (!selectedClient?._id) {
       showMessage("No Client Selected", "Please select a client first.", "warning");
@@ -3015,6 +3047,8 @@ function ClientList() {
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
         PaymentBreakdown: paymentBreakdown,
+        TransferDate: topLevelTransferDate,
+        GCashTransferDate: topLevelTransferDate,
         DeclaredBy: createdByName || createdById,
         DeclaredById: createdById,
         TransactionDate: transactionDateTime
@@ -3034,6 +3068,8 @@ function ClientList() {
         MOP: topLevelPaymentMethod,
         MOPRef: topLevelPaymentReference,
         ReferenceNumber: topLevelPaymentReference,
+        TransferDate: topLevelTransferDate,
+        GCashTransferDate: topLevelTransferDate,
         Verified: false,
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
@@ -4676,6 +4712,20 @@ function ClientList() {
                         }
                       />
 
+                      <TextField
+                        label="Transfer Date"
+                        value={entry.transferDate || ""}
+                        onChange={(event) =>
+                          handlePaymentEntryChange(index, "transferDate", event.target.value)
+                        }
+                        disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        helperText={
+                          normalizePaymentLineMethod(entry.method) === "CASH"
+                            ? "Not required for cash"
+                            : "From GCash / non-cash receipt"
+                        }
+                      />
+
                       <Button
                         color="error"
                         variant="outlined"
@@ -4939,6 +4989,20 @@ function ClientList() {
                       normalizePaymentLineMethod(entry.method) === "CASH"
                         ? "Not required for cash"
                         : "Required for non-cash"
+                    }
+                  />
+
+                  <TextField
+                    label="Transfer Date"
+                    value={entry.transferDate || ""}
+                    onChange={(event) =>
+                      handlePaymentEntryChange(index, "transferDate", event.target.value)
+                    }
+                    disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                    helperText={
+                      normalizePaymentLineMethod(entry.method) === "CASH"
+                        ? "Not required for cash"
+                        : "From GCash / non-cash receipt"
                     }
                   />
 
