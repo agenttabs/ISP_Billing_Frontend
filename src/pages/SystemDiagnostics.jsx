@@ -39,7 +39,7 @@ export default function SystemDiagnostics() {
   }, []);
 
   return (
-    <Box>
+    <Box sx={{ minWidth: 0, width: "100%", overflowX: "hidden" }}>
       <Stack spacing={3}>
         <PageHeader
           title="System Diagnostics"
@@ -49,7 +49,7 @@ export default function SystemDiagnostics() {
         {error ? <Alert severity="error">{error}</Alert> : null}
 
         {loading ? (
-          <Card sx={{ borderRadius: 4 }}>
+          <Card sx={{ borderRadius: 4, minWidth: 0, width: "100%" }}>
             <CardContent sx={{ p: 4, textAlign: "center" }}>
               <CircularProgress />
             </CardContent>
@@ -58,7 +58,7 @@ export default function SystemDiagnostics() {
 
         {data ? (
           <>
-            <Card sx={{ borderRadius: 4 }}>
+            <Card sx={{ borderRadius: 4, minWidth: 0, width: "100%" }}>
               <CardContent sx={{ p: 3 }}>
                 <Stack spacing={1.5}>
                   <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
@@ -73,48 +73,55 @@ export default function SystemDiagnostics() {
                     />
                   </Typography>
                   <Typography>Database: {data.runtime?.databaseName || "-"}</Typography>
-                  <Typography sx={{ wordBreak: "break-all" }}>
+                  <Typography sx={{ wordBreak: "break-all", overflowWrap: "anywhere" }}>
                     Mongo URI: {data.runtime?.mongoUri || "-"}
                   </Typography>
                 </Stack>
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 4 }}>
+            <Card sx={{ borderRadius: 4, minWidth: 0, width: "100%" }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography sx={{ fontWeight: 700, color: "#0f172a", mb: 2 }}>
                   Configured Collections
                 </Typography>
 
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Key</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Value</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Object.entries(data.collections || {}).map(([key, value]) => (
-                      <TableRow key={key}>
-                        <TableCell>{key}</TableCell>
-                        <TableCell>
-                          {Array.isArray(value) ? value.join(", ") : String(value || "-")}
-                        </TableCell>
+                <Box sx={{ width: "100%", minWidth: 0, overflowX: "auto" }}>
+                  <Table size="small" sx={{ tableLayout: "fixed", minWidth: 0, width: "100%" }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, width: 220 }}>Key</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Value</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(data.collections || {}).map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell sx={{ wordBreak: "break-word" }}>{key}</TableCell>
+                          <TableCell sx={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                            {Array.isArray(value) ? value.join(", ") : String(value || "-")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 4 }}>
+            <Card sx={{ borderRadius: 4, minWidth: 0, width: "100%" }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography sx={{ fontWeight: 700, color: "#0f172a", mb: 1.5 }}>
                   Available Collections In DB
                 </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
                   {(data.availableCollections || []).map((name) => (
-                    <Chip key={name} label={name} variant="outlined" sx={{ fontWeight: 600 }} />
+                    <Chip
+                      key={name}
+                      label={name}
+                      variant="outlined"
+                      sx={{ fontWeight: 600, maxWidth: "100%", "& .MuiChip-label": { overflowWrap: "anywhere" } }}
+                    />
                   ))}
                 </Stack>
               </CardContent>

@@ -20,12 +20,14 @@ import {
   Alert,
   Switch,
   Tabs,
-  Tab
+  Tab,
+  CircularProgress
   } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 import PaymentIcon from "@mui/icons-material/Payment";
+import SmsOutlinedIcon from "@mui/icons-material/SmsOutlined";
 import RouterIcon from "@mui/icons-material/Router";
 import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
@@ -50,6 +52,7 @@ import { useClient } from "../context/client.context";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REPAIR_SMS_TEMPLATE_TYPE = "smsRepairTech";
+const getTodayLocalDate = () => dayjs().format("YYYY-MM-DD");
 
 const formatDateToMMDDYYYY = (value) => {
   if (!value) return "";
@@ -85,6 +88,23 @@ const createPaymentEntry = (overrides = {}) => ({
   ...overrides
 });
 
+const toSalesInvoiceNumber = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.startsWith("PR-")) {
+    return `SI-${raw.slice(3)}`;
+  }
+
+  if (raw.startsWith("SI-")) {
+    return raw;
+  }
+
+  return raw.startsWith("SI") ? raw : `SI-${raw}`;
+};
+
 const defaultReceiptPrintConfig = {
   Name: "Default Thermal Receipt",
   CompanyName: "DNS NETWORKS",
@@ -92,6 +112,7 @@ const defaultReceiptPrintConfig = {
   ReceiptSubtitle: "For Xprinter / Thermal Printer",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "Xprinter",
+  EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,
   ShowContactNumber: true,
@@ -401,6 +422,27 @@ const addOneMonthToDate = (value, preferredDay) => {
   return new Date(originalYear, originalMonth + 1, safeDay, 12, 0, 0, 0);
 };
 
+const resolveBillingAnchorDay = (dueDateValue, preferredDay) => {
+  const normalizedPreferredDay = Number(preferredDay) || null;
+
+  if (!dueDateValue) {
+    return normalizedPreferredDay;
+  }
+
+  const parsedDueDate = new Date(dueDateValue);
+  if (Number.isNaN(parsedDueDate.getTime())) {
+    return normalizedPreferredDay;
+  }
+
+  const dueDay = parsedDueDate.getDate();
+
+  if (!normalizedPreferredDay) {
+    return dueDay;
+  }
+
+  return normalizedPreferredDay === dueDay ? normalizedPreferredDay : dueDay;
+};
+
 const getDefaultNewClientForm = () => {
   const nextMonth = dayjs().add(1, "month");
   const dueDate = nextMonth.format("MM/DD/YYYY");
@@ -461,6 +503,35 @@ const getPlanType = (plan) =>
 const getNormalizedAuthMode = (value) =>
   String(value || "").trim().toUpperCase();
 
+const resolvePreviousReconnectPlan = ({ client, netPlans, authMode }) => {
+  const normalizedAuthMode = getNormalizedAuthMode(
+    authMode || client?.PreviousAuthenticationMode || client?.AuthenticationMode
+  );
+  const previousNetPlan = String(client?.PreviousNetPlan || "").trim();
+  const previousProfile = String(client?.PreviousProfile || "").trim();
+
+  if (!previousNetPlan && !previousProfile) {
+    return null;
+  }
+
+  return (
+    (netPlans || []).find((plan) => {
+      const planType = getPlanType(plan);
+      if (normalizedAuthMode && planType && planType !== normalizedAuthMode) {
+        return false;
+      }
+
+      const planName = String(getPlanName(plan) || "").trim();
+      const planSpeed = String(getPlanSpeed(plan) || "").trim();
+
+      return (
+        (previousNetPlan && (planName === previousNetPlan || planSpeed === previousNetPlan)) ||
+        (previousProfile && planName === previousProfile)
+      );
+    }) || null
+  );
+};
+
 const getDisplayedPaymentStatus = (client) => {
   if (!client?.DueDate) {
     return (client?.PaymentStatus || "UNPAID").toUpperCase();
@@ -498,6 +569,7 @@ const getPaymentBreakdownLines = (row) => {
   const paymentMethod = normalizePaymentLineMethod(row?.PaymentMethod || row?.MOP);
   const cashAmount = Number(row?.CashAmount || 0);
   const gcashAmount = Number(row?.GCashAmount || 0);
+  const totalAmount = Number(row?.TotalAmount || row?.Cash || 0);
   const fallbackReference = String(
     row?.MOPRef || row?.ReferenceNumber || row?.TransactionCode || ""
   ).trim();
@@ -521,8 +593,16 @@ const getPaymentBreakdownLines = (row) => {
   if (!lines.length && paymentMethod) {
     lines.push({
       Method: paymentMethod,
-      Amount: Number(row?.TotalAmount || row?.Cash || 0),
+      Amount: totalAmount,
       Reference: paymentMethod === "CASH" ? "" : fallbackReference
+    });
+  }
+
+  if (!lines.length && fallbackReference && totalAmount > 0) {
+    lines.push({
+      Method: "GCASH",
+      Amount: totalAmount,
+      Reference: fallbackReference
     });
   }
 
@@ -785,6 +865,52 @@ const getModemStatusLabel = ({ isIpoeClient, lease }) => {
   return "ACTIVE";
 };
 
+const resolveIpoeLeaseForClient = ({
+  client,
+  leases = [],
+  leaseByMacAddress = {},
+  leaseByAccountName = {}
+}) => {
+  if (!client) {
+    return null;
+  }
+
+  const normalizedAuthMode = String(
+    client.AuthenticationMode || client.authMode || ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (normalizedAuthMode !== "IPOE") {
+    return null;
+  }
+
+  const macKey = String(
+    client.MacAddress || client.macAddress || ""
+  )
+    .trim()
+    .toUpperCase();
+  const accountKey = String(client.AccountName || "")
+    .trim()
+    .toUpperCase();
+
+  const mappedLease =
+    leaseByMacAddress[macKey] || leaseByAccountName[accountKey] || null;
+
+  if (mappedLease) {
+    return mappedLease;
+  }
+
+  return (
+    leases.find((lease) => {
+      const leaseCommentName = getCommentValue(lease?.comment, "NAME")
+        .trim()
+        .toUpperCase();
+      return Boolean(accountKey) && leaseCommentName === accountKey;
+    }) || null
+  );
+};
+
 const formatTrafficBytes = (value) => {
   const numericValue = Number(value || 0);
 
@@ -865,6 +991,7 @@ function ClientList() {
 
   const [openModal, setOpenModal] = useState(false);
   const [openPaymentModal, setOpenPaymentModal] = useState(false);
+  const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
   const [openPaymentEntriesModal, setOpenPaymentEntriesModal] = useState(false);
   const [openBillingModal, setOpenBillingModal] = useState(false);
   const [openPaymentHistoryModal, setOpenPaymentHistoryModal] = useState(false);
@@ -885,7 +1012,7 @@ function ClientList() {
   const [dhcpLeaseComments, setDhcpLeaseComments] = useState([]);
   const [paymentForm, setPaymentForm] = useState({
     AmountPaid: "",
-    PaymentDate: new Date().toISOString().split("T")[0],
+    PaymentDate: getTodayLocalDate(),
     ReferenceNumber: "",
     Invoice: "",
     Notes: "",
@@ -1006,16 +1133,34 @@ function ClientList() {
   }, [fetchClients]);
 
   useEffect(() => {
-    const selectedClientOverdueDays = getClientOverdueDays(selectedClient);
-    const paymentNeedsReconnectFlow =
-      isDisconnectedPlan(selectedClient) ||
-      Boolean(paymentForm.ReconnectRequired) ||
-      selectedClientOverdueDays >= 15;
-    const paymentNeedsDhcp =
-      openPaymentModal &&
-      getNormalizedAuthMode(
+      const selectedClientOverdueDays = getClientOverdueDays(selectedClient);
+      const selectedClientLease = resolveIpoeLeaseForClient({
+        client: selectedClient,
+        leases: dhcpLeaseComments,
+        leaseByMacAddress: modemLeaseByMacAddress,
+        leaseByAccountName: modemLeaseByAccountName
+      });
+      const selectedClientAuthMode = getNormalizedAuthMode(
         paymentForm.ReconnectAuthMode || selectedClient?.AuthenticationMode
-      ) === "IPOE" &&
+      );
+      const paymentHasActiveIpoeLease =
+        selectedClientAuthMode === "IPOE" &&
+        getModemStatusLabel({
+          isIpoeClient: true,
+          lease: selectedClientLease
+        }) === "ACTIVE";
+      const paymentNeedsReconnectFlow =
+        !paymentHasActiveIpoeLease &&
+        (
+          isDisconnectedPlan(selectedClient) ||
+          Boolean(paymentForm.ReconnectRequired) ||
+          selectedClientOverdueDays >= 15
+        );
+      const paymentNeedsDhcp =
+        openPaymentModal &&
+        getNormalizedAuthMode(
+          paymentForm.ReconnectAuthMode || selectedClient?.AuthenticationMode
+        ) === "IPOE" &&
       paymentNeedsReconnectFlow;
 
     if ((!openModal || newClient.AuthenticationMode !== "IPOE") && !paymentNeedsDhcp) {
@@ -1060,6 +1205,7 @@ function ClientList() {
     };
   }, [
     newClient.AuthenticationMode,
+    dhcpLeaseComments,
     openModal,
     openPaymentModal,
     paymentForm.ReconnectAuthMode,
@@ -1076,6 +1222,9 @@ function ClientList() {
 
     const refreshReceiptNumber = async () => {
       try {
+        if (active) {
+          setPaymentReceiptLoading(true);
+        }
         const nextReceiptNumber = await fetchNextPaymentReceiptNumber(
           paymentForm.PaymentDate
         );
@@ -1087,7 +1236,7 @@ function ClientList() {
         setPaymentForm((prev) => ({
           ...prev,
           ReferenceNumber: nextReceiptNumber,
-          Invoice: nextReceiptNumber
+          Invoice: toSalesInvoiceNumber(nextReceiptNumber)
         }));
       } catch (err) {
         if (!active) {
@@ -1098,6 +1247,18 @@ function ClientList() {
           "PAYMENT DATE RECEIPT REFRESH ERROR:",
           err.response?.data || err.message
         );
+        setOpenPaymentModal(false);
+        setOpenPaymentEntriesModal(false);
+        resetPaymentForm();
+        showMessage(
+          "Receipt Number Error",
+          "Failed to generate the next PR receipt number.",
+          "error"
+        );
+      } finally {
+        if (active) {
+          setPaymentReceiptLoading(false);
+        }
       }
     };
 
@@ -1188,9 +1349,9 @@ function ClientList() {
   const modalAccountNameKey = String(newClient.AccountName || "").trim().toUpperCase();
   const modalMacKey = String(newClient.MacAddress || "").trim().toUpperCase();
   const modalLease =
-    modemLeaseByMacAddress[modalMacKey] ||
-    modemLeaseByAccountName[modalAccountNameKey] ||
-    null;
+      modemLeaseByMacAddress[modalMacKey] ||
+      modemLeaseByAccountName[modalAccountNameKey] ||
+      null;
   const modalIsIpoeClient = selectedAuthMode === "IPOE";
   const modalModemStatus = getModemStatusLabel({
     isIpoeClient: modalIsIpoeClient,
@@ -1342,11 +1503,16 @@ function ClientList() {
 
   const fetchNextPaymentReceiptNumber = async (paymentDate) => {
     const targetDate =
-      paymentDate || new Date().toISOString().split("T")[0];
+      paymentDate || getTodayLocalDate();
 
     const { data } = await API.get("/payments/next-receipt-number", {
       params: {
-        date: targetDate
+        date: targetDate,
+        _: Date.now()
+      },
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache"
       }
     });
 
@@ -1367,7 +1533,15 @@ function ClientList() {
   };
 
   const openPaymentModalForClient = async (client, options = {}) => {
-    const paymentDate = new Date().toISOString().split("T")[0];
+    const paymentDate = getTodayLocalDate();
+    const reconnectAuthMode = getNormalizedAuthMode(
+      client?.PreviousAuthenticationMode || client?.AuthenticationMode
+    );
+    const previousReconnectPlan = resolvePreviousReconnectPlan({
+      client,
+      netPlans,
+      authMode: reconnectAuthMode
+    });
 
     setSelectedClient(client);
     setPaymentForm({
@@ -1380,10 +1554,12 @@ function ClientList() {
       Discount: "",
       ContactNumber: String(client.ContactNumber || ""),
       ReconnectRequired: Boolean(options.reconnectRequired),
-      ReconnectAuthMode: String(client.AuthenticationMode || "").trim().toUpperCase(),
-      ReconnectPlan: "",
-      ReconnectCharge: 0,
-      ReconnectMacAddress: ""
+      ReconnectAuthMode: reconnectAuthMode,
+      ReconnectPlan: getPlanName(previousReconnectPlan) || "",
+      ReconnectCharge: previousReconnectPlan ? getPlanPrice(previousReconnectPlan) : 0,
+      ReconnectMacAddress: String(client.PreviousMacAddress || client.MacAddress || "")
+        .trim()
+        .toUpperCase()
     });
     setPaymentEntries([
       createPaymentEntry({
@@ -1392,6 +1568,7 @@ function ClientList() {
       })
     ]);
     setOpenPaymentModal(true);
+    setPaymentReceiptLoading(true);
 
     try {
       const nextReceiptNumber = await fetchNextPaymentReceiptNumber(paymentDate);
@@ -1399,15 +1576,20 @@ function ClientList() {
       setPaymentForm((prev) => ({
         ...prev,
         ReferenceNumber: nextReceiptNumber,
-        Invoice: nextReceiptNumber
+        Invoice: toSalesInvoiceNumber(nextReceiptNumber)
       }));
     } catch (err) {
       console.error("PAYMENT RECEIPT NUMBER ERROR:", err.response?.data || err.message);
+      setOpenPaymentModal(false);
+      setOpenPaymentEntriesModal(false);
+      resetPaymentForm();
       showMessage(
         "Receipt Number Error",
         "Failed to generate the next PR receipt number.",
         "error"
       );
+    } finally {
+      setPaymentReceiptLoading(false);
     }
   };
 
@@ -1459,6 +1641,29 @@ function ClientList() {
       setPaymentHistoryRows([]);
     } finally {
       setPaymentHistoryLoading(false);
+    }
+  };
+
+  const handleResendPaymentReceivedSms = async (client) => {
+    try {
+      const { data } = await API.post(
+        `/sms/send-payment-received-latest/${client._id}`
+      );
+
+      showMessage(
+        data?.sent ? "Payment SMS Sent" : "Payment SMS Skipped",
+        data?.sent
+          ? `Payment received SMS was sent again to ${client.AccountName || client.ClientName || "the client"}.`
+          : data?.reason || data?.response || "Payment received SMS was skipped.",
+        data?.sent ? "success" : "warning"
+      );
+    } catch (err) {
+      console.error("RESEND PAYMENT SMS ERROR:", err.response?.data || err.message);
+      showMessage(
+        "Payment SMS Failed",
+        err.response?.data?.error || "Failed to send payment received SMS.",
+        "error"
+      );
     }
   };
 
@@ -1637,13 +1842,23 @@ function ClientList() {
 
   const handleReconnectAuthModeChange = (event) => {
     const nextAuthMode = getNormalizedAuthMode(event.target.value);
+    const previousReconnectPlan = resolvePreviousReconnectPlan({
+      client: selectedClient,
+      netPlans,
+      authMode: nextAuthMode
+    });
 
     setPaymentForm((prev) => ({
       ...prev,
       ReconnectAuthMode: nextAuthMode,
-      ReconnectPlan: "",
-      ReconnectCharge: 0,
-      ReconnectMacAddress: nextAuthMode === "IPOE" ? prev.ReconnectMacAddress : ""
+      ReconnectPlan: getPlanName(previousReconnectPlan) || "",
+      ReconnectCharge: previousReconnectPlan ? getPlanPrice(previousReconnectPlan) : 0,
+      ReconnectMacAddress:
+        nextAuthMode === "IPOE"
+          ? String(selectedClient?.PreviousMacAddress || prev.ReconnectMacAddress || "")
+              .trim()
+              .toUpperCase()
+          : ""
     }));
   };
 
@@ -1850,7 +2065,8 @@ function ClientList() {
   };
 
   const summaryCardSx = {
-    p: 1.6,
+    p: 0.75,
+    minHeight: 58,
     borderRadius: 3,
     border: "1px solid #dbe4ee",
     background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
@@ -2286,7 +2502,7 @@ function ClientList() {
   const resetPaymentForm = () => {
     setPaymentForm({
       AmountPaid: "",
-      PaymentDate: new Date().toISOString().split("T")[0],
+      PaymentDate: getTodayLocalDate(),
       ReferenceNumber: "",
       Invoice: "",
       Notes: "",
@@ -2318,6 +2534,7 @@ function ClientList() {
     if (reason === "backdropClick") return;
 
     setOpenPaymentModal(false);
+    setPaymentReceiptLoading(false);
     setOpenPaymentEntriesModal(false);
     resetPaymentForm();
   };
@@ -2399,6 +2616,19 @@ function ClientList() {
   const paymentSelectedAuthMode = getNormalizedAuthMode(
     paymentForm.ReconnectAuthMode || selectedClient?.AuthenticationMode
   );
+  const paymentSelectedClientLease = resolveIpoeLeaseForClient({
+    client: selectedClient,
+    leases: dhcpLeaseComments,
+    leaseByMacAddress: modemLeaseByMacAddress,
+    leaseByAccountName: modemLeaseByAccountName
+  });
+  const paymentSelectedClientModemStatus = getModemStatusLabel({
+    isIpoeClient: paymentSelectedAuthMode === "IPOE",
+    lease: paymentSelectedClientLease
+  });
+  const paymentHasActiveIpoeLease =
+    paymentSelectedAuthMode === "IPOE" &&
+    paymentSelectedClientModemStatus === "ACTIVE";
   const paymentReconnectMacAddress = String(
     paymentForm.ReconnectMacAddress || selectedClient?.MacAddress || ""
   )
@@ -2422,9 +2652,12 @@ function ClientList() {
   ];
   const paymentOverdueDays = getClientOverdueDays(selectedClient);
   const paymentRequiresReconnectFlow =
-      isDisconnectedPlan(selectedClient) ||
-      Boolean(paymentForm.ReconnectRequired) ||
-      paymentOverdueDays >= 15;
+      !paymentHasActiveIpoeLease &&
+      (
+        isDisconnectedPlan(selectedClient) ||
+        Boolean(paymentForm.ReconnectRequired) ||
+        paymentOverdueDays >= 15
+      );
   const rawPlanAmount = Number(selectedClient?.AmountDue ?? 0);
   const planAmount = paymentRequiresReconnectFlow
     ? getPlanPrice(selectedReconnectPlan)
@@ -2469,7 +2702,10 @@ function ClientList() {
 
   const dueDateValue = selectedClient?.DueDate ? new Date(selectedClient.DueDate) : null;
   const subscriptionStartDate = dueDateValue;
-  const subscriptionAnchorDay = Number(selectedClient?.SubscriptionCover) || null;
+  const subscriptionAnchorDay = resolveBillingAnchorDay(
+    dueDateValue,
+    selectedClient?.SubscriptionCover
+  );
   const subscriptionEndDate = dueDateValue
       ? (() => {
           const nextDueDate = addOneMonthToDate(dueDateValue, subscriptionAnchorDay);
@@ -2548,6 +2784,11 @@ function ClientList() {
   const handleReprintPaymentHistory = async (row) => {
     const receiptPayload = createReceiptPayloadFromHistoryRow(row, receiptPrintConfig);
 
+    if (!receiptPrintConfig?.EnablePrinting) {
+      showMessage("Printing Disabled", "Receipt printing is disabled in Print Receipt settings.", "info");
+      return;
+    }
+
     if (receiptPrintConfig?.UseDirectPrint) {
       try {
         await tryAutoPrintToXprinter(receiptPayload);
@@ -2569,7 +2810,8 @@ function ClientList() {
     const reconnectPlan = netPlans.find(
       (plan) => getPlanName(plan) === paymentForm.ReconnectPlan
     );
-    const paymentReceiptNumber = paymentForm.Invoice || paymentForm.ReferenceNumber || "";
+    const paymentReceiptNumber = paymentForm.ReferenceNumber || "";
+    const salesInvoiceNumber = paymentForm.Invoice || toSalesInvoiceNumber(paymentReceiptNumber);
     const paymentBreakdown = normalizedPaymentEntries.map((entry) => ({
       Method: entry.method,
       Amount: entry.amount,
@@ -2620,11 +2862,40 @@ function ClientList() {
       return;
     }
 
-    try {
-      await API.post("/payments/validate-references", {
-        entries: normalizedPaymentEntries
-          .filter((entry) => entry.method !== "CASH")
-          .map((entry) => ({
+      try {
+        await API.post("/payments/validate-documents", {
+          paymentReceipt: paymentReceiptNumber,
+          salesInvoice: salesInvoiceNumber
+        });
+      } catch (documentError) {
+        if (documentError.response?.status === 409) {
+          showMessage(
+            "Duplicate Payment Reference",
+            documentError.response?.data?.error ||
+              "Payment receipt or sales invoice already exists.",
+            "error"
+          );
+          return;
+        }
+
+        if (documentError.response?.status === 400) {
+          showMessage(
+            "Invalid Payment Reference",
+            documentError.response?.data?.error ||
+              "Payment receipt or sales invoice is required.",
+            "warning"
+          );
+          return;
+        }
+
+        throw documentError;
+      }
+
+      try {
+        await API.post("/payments/validate-references", {
+          entries: normalizedPaymentEntries
+            .filter((entry) => entry.method !== "CASH")
+            .map((entry) => ({
             method: entry.method,
             amount: entry.amount,
             reference: entry.reference,
@@ -2689,8 +2960,10 @@ function ClientList() {
         : selectedClient.Note || "";
       const transactionDateTime = new Date();
         const billingAnchorDay =
-          Number(selectedClient.SubscriptionCover) ||
-          Number(paymentForm.SubscriptionCover) ||
+          resolveBillingAnchorDay(
+            selectedClient?.DueDate || paymentForm.PaymentDate,
+            selectedClient?.SubscriptionCover || paymentForm.SubscriptionCover
+          ) ||
           null;
         const nextDueDateDate =
           addOneMonthToDate(selectedClient.DueDate, billingAnchorDay) ||
@@ -2706,7 +2979,7 @@ function ClientList() {
 
       const earningPayload = {
         AccountName: selectedClient.AccountName || "",
-        Invoice: paymentForm.Invoice || "",
+        Invoice: salesInvoiceNumber,
         Item: "ISP-Client Payment",
         MOP: topLevelPaymentMethod,
         MOPRef: topLevelPaymentReference,
@@ -2737,7 +3010,7 @@ function ClientList() {
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
         PaymentBreakdown: paymentBreakdown,
-        Invoice: paymentForm.Invoice || "",
+        Invoice: salesInvoiceNumber,
         PaymentReceipt: paymentReceiptNumber,
         TransactionCode: paymentReceiptNumber,
         BillingReference: "",
@@ -2777,8 +3050,14 @@ function ClientList() {
           AuthenticationMode: reconnectPlan
             ? paymentSelectedAuthMode || selectedClient.AuthenticationMode
             : selectedClient.AuthenticationMode,
-          Profile: getPlanName(reconnectPlan) || selectedClient.Profile,
-          NetPlan: getPlanSpeed(reconnectPlan) || getPlanName(reconnectPlan) || selectedClient.NetPlan,
+          Profile: reconnectPlan
+            ? paymentSelectedAuthMode === "PPPOE"
+              ? selectedClient.PreviousProfile || getPlanName(reconnectPlan) || selectedClient.Profile
+              : getPlanName(reconnectPlan) || selectedClient.Profile
+            : selectedClient.Profile,
+          NetPlan: reconnectPlan
+            ? selectedClient.PreviousNetPlan || getPlanSpeed(reconnectPlan) || getPlanName(reconnectPlan) || selectedClient.NetPlan
+            : selectedClient.NetPlan,
           AmountDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
           Status: reconnectPlan ? "ACTIVE" : selectedClient.Status,
           MacAddress:
@@ -2787,6 +3066,10 @@ function ClientList() {
                 ? paymentReconnectMacAddress
                 : ""
               : selectedClient.MacAddress,
+          PreviousAuthenticationMode: reconnectPlan ? "" : selectedClient.PreviousAuthenticationMode,
+          PreviousProfile: reconnectPlan ? "" : selectedClient.PreviousProfile,
+          PreviousNetPlan: reconnectPlan ? "" : selectedClient.PreviousNetPlan,
+          PreviousMacAddress: reconnectPlan ? "" : selectedClient.PreviousMacAddress,
           AmountPaid: amountPaid,
           CashAmount: cashPaymentAmount,
           GCashAmount: gcashPaymentAmount,
@@ -2821,41 +3104,67 @@ function ClientList() {
         notes: paymentForm.Notes || "",
         receiptConfig: receiptPrintConfig
       };
-
-      if (receiptPrintConfig?.UseDirectPrint) {
-        try {
-          await tryAutoPrintToXprinter(receiptPayload);
-        } catch (printError) {
-          console.error("XPRINTER AUTO PRINT ERROR:", printError.message || printError);
-          const receiptWindow =
-            typeof window !== "undefined"
-              ? window.open("", "_blank", "width=420,height=900")
-              : null;
-          openPaymentReceiptPrint(receiptWindow, receiptPayload);
-        }
-      } else {
-        const receiptWindow =
-          typeof window !== "undefined"
-            ? window.open("", "_blank", "width=420,height=900")
-            : null;
-        openPaymentReceiptPrint(receiptWindow, receiptPayload);
-      }
       handleClosePaymentModal();
 
-      void API.post("/sms/send-payment-received", {
-        client: {
-          ClientName: selectedClient.ClientName || "",
-          AccountName: selectedClient.AccountName || "",
-          AccountNumber: selectedClient.AccountNumber || "",
-          ContactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || ""
-        },
-        amountPaid,
-        monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
-        subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
-        nextDueDate: nextDueDateIso
-      }).catch((smsErr) => {
+      try {
+        const { data: smsResult } = await API.post("/sms/send-payment-received", {
+          client: {
+            ClientName: selectedClient.ClientName || "",
+            AccountName: selectedClient.AccountName || "",
+            AccountNumber: selectedClient.AccountNumber || "",
+            ContactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || ""
+          },
+          amountPaid,
+          monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
+          subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
+          nextDueDate: nextDueDateIso
+        });
+
+        if (!smsResult?.sent) {
+          showMessage(
+            "Payment Saved, SMS Skipped",
+            smsResult?.reason || smsResult?.response || "Payment was saved but the SMS was not sent.",
+            "warning"
+          );
+        }
+      } catch (smsErr) {
         console.error("PAYMENT SMS ERROR:", smsErr.response?.data || smsErr.message);
-      });
+          showMessage(
+            "Payment Saved, SMS Failed",
+            smsErr.response?.data?.error || "Payment was saved but the SMS request failed.",
+            "warning"
+          );
+        }
+
+      if (receiptPrintConfig?.EnablePrinting) {
+        try {
+          if (receiptPrintConfig?.UseDirectPrint) {
+            try {
+              await tryAutoPrintToXprinter(receiptPayload);
+            } catch (printError) {
+              console.error("XPRINTER AUTO PRINT ERROR:", printError.message || printError);
+              const receiptWindow =
+                typeof window !== "undefined"
+                  ? window.open("", "_blank", "width=420,height=900")
+                  : null;
+              openPaymentReceiptPrint(receiptWindow, receiptPayload);
+            }
+          } else {
+            const receiptWindow =
+              typeof window !== "undefined"
+                ? window.open("", "_blank", "width=420,height=900")
+                : null;
+            openPaymentReceiptPrint(receiptWindow, receiptPayload);
+          }
+        } catch (printErr) {
+          console.error("PAYMENT PRINT ERROR:", printErr.message || printErr);
+          showMessage(
+            "Payment Saved, Print Failed",
+            "Payment was saved but the receipt print failed.",
+            "warning"
+          );
+        }
+      }
     } catch (err) {
       console.error("PAYMENT ERROR:", err.response?.data || err.message);
       showMessage("Payment Failed", "Failed to save payment.", "error");
@@ -3045,30 +3354,12 @@ function ClientList() {
                   <TableCell>{c.ClientName}</TableCell>
                   <TableCell>{c.AccountName}</TableCell>
                   <TableCell>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4 }}>
-                      <Typography sx={{ fontSize: "0.92rem", fontWeight: 700, color: "#0f172a" }}>
-                        {c.NetPlan || "-"}
-                      </Typography>
-                      <Chip
-                        label={getNormalizedAuthMode(c.AuthenticationMode) || "N/A"}
-                        size="small"
-                        sx={{
-                          width: "fit-content",
-                          borderRadius: "999px",
-                          height: 24,
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          backgroundColor:
-                            getNormalizedAuthMode(c.AuthenticationMode) === "IPOE"
-                              ? "#eff6ff"
-                              : "#f5f3ff",
-                          color:
-                            getNormalizedAuthMode(c.AuthenticationMode) === "IPOE"
-                              ? "#1d4ed8"
-                              : "#6d28d9"
-                        }}
-                      />
-                    </Box>
+                    <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569" }}>
+                      {c.NetPlan || "-"}{" "}
+                      <Box component="span" sx={{ color: "#6d28d9", fontWeight: 700 }}>
+                        - {getNormalizedAuthMode(c.AuthenticationMode) || "N/A"}
+                      </Box>
+                    </Typography>
                   </TableCell>
 
                   <TableCell>
@@ -3185,6 +3476,15 @@ function ClientList() {
                       </IconButton>
                     </Tooltip>
 
+                    <Tooltip title="SMS">
+                      <IconButton
+                        sx={{ "&:hover": { color: "#0f766e" } }}
+                        onClick={() => handleResendPaymentReceivedSms(c)}
+                      >
+                        <SmsOutlinedIcon />
+                      </IconButton>
+                    </Tooltip>
+
                     <Tooltip title="Repair">
                       <IconButton
                         sx={{ "&:hover": { color: "#ea580c" } }}
@@ -3240,9 +3540,11 @@ function ClientList() {
         open={openModal}
         onClose={handleCloseModal}
         fullWidth
-        maxWidth="lg"
+        maxWidth={false}
         PaperProps={{
           sx: {
+            width: "94vw",
+            maxWidth: "1380px",
             borderRadius: 4,
             overflow: "hidden",
             background: "#f6f9fc",
@@ -3254,8 +3556,8 @@ function ClientList() {
           sx={{
             background: "linear-gradient(90deg, #0f4c81, #2563eb)",
             color: "#fff",
-            px: 3.5,
-            py: 2.25,
+            px: 3,
+            py: 1.6,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between"
@@ -3263,7 +3565,7 @@ function ClientList() {
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <PersonAddIcon />
-            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+            <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>
               {editMode ? "Update Client" : "Add New Client"}
             </Typography>
           </Box>
@@ -3273,20 +3575,20 @@ function ClientList() {
           </IconButton>
         </Box>
 
-        <DialogContent sx={{ p: 3, backgroundColor: "#f6f9fc" }}>
+        <DialogContent sx={{ p: 2.25, backgroundColor: "#f6f9fc" }}>
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "1.15fr 0.85fr" },
-              gap: 2
+              gridTemplateColumns: { xs: "1fr", xl: "1.18fr 0.82fr" },
+              gap: 1.5
             }}
           >
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
                 Basic Information
               </Typography>
 
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.25 }}>
                 <TextField
                   label="Client Name"
                   name="ClientName"
@@ -3304,7 +3606,7 @@ function ClientList() {
                 />
               </Box>
 
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1.25, mt: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1, mt: 1.25 }}>
                 <TextField
                   label="Password"
                   name="Password"
@@ -3317,7 +3619,7 @@ function ClientList() {
                   variant="outlined"
                   onClick={generatePassword}
                   disabled={selectedAuthMode === "IPOE"}
-                  sx={{ px: 2.5, borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+                  sx={{ px: 2, borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                 >
                   Generate
                 </Button>
@@ -3325,11 +3627,11 @@ function ClientList() {
             </Paper>
 
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
                 Network Setup
               </Typography>
 
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" }, gap: 1.25 }}>
                   <TextField
                     select
                     label="Authentication"
@@ -3388,14 +3690,14 @@ function ClientList() {
 
               <Box
                 sx={{
-                  mt: 1.75,
+                  mt: 1.2,
                   display: "flex",
                   alignItems: "center",
-                  gap: 1.25,
+                  gap: 1,
                   flexWrap: "wrap"
                 }}
               >
-                <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#334155" }}>
+                <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
                   Status Modem
                 </Typography>
                 <Chip
@@ -3432,7 +3734,7 @@ function ClientList() {
                   }}
                 />
                 {modalIsIpoeClient && (modalLeaseMacAddress || modalLeaseIpAddress) ? (
-                  <Typography sx={{ fontSize: "12px", color: "#64748b" }}>
+                  <Typography sx={{ fontSize: "10px", color: "#64748b" }}>
                     {modalLeaseMacAddress ? `MAC: ${modalLeaseMacAddress}` : ""}
                     {modalLeaseMacAddress && modalLeaseIpAddress ? " | " : ""}
                     {modalLeaseIpAddress ? `IP: ${modalLeaseIpAddress}` : ""}
@@ -3442,17 +3744,17 @@ function ClientList() {
             </Paper>
 
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
                 Contact Details
               </Typography>
 
               <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "2.4fr 0.8fr" },
-                  gap: 2
-                }}
-              >
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "2.4fr 0.8fr" },
+                    gap: 1.25
+                  }}
+                >
                 <TextField
                   label="Address"
                   name="Address"
@@ -3603,7 +3905,7 @@ function ClientList() {
               </Paper>
 
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
                 Plan Details
               </Typography>
 
@@ -3611,7 +3913,7 @@ function ClientList() {
                 sx={{
                   display: "grid",
                   gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr" },
-                  gap: 2
+                  gap: 1.25
                 }}
               >
                 <TextField
@@ -3631,7 +3933,7 @@ function ClientList() {
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <DatePicker
                     label="Due Date"
-                    disabled={editMode}
+                    disabled={editMode || !isAdminUser}
                     value={
                       newClient.DueDate
                         ? dayjs(parseMMDDYYYYToISO(newClient.DueDate))
@@ -3680,10 +3982,9 @@ function ClientList() {
                 gridColumn: { xs: "1 / span 1", lg: "1 / span 2" }
               }}
             >
-              <Typography sx={{ fontWeight: 700, mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
                 Notes
               </Typography>
-
               <TextField
                 label="Notes"
                 name="Note"
@@ -3699,8 +4000,8 @@ function ClientList() {
 
       <DialogActions
           sx={{
-            px: 3,
-            py: 2.25,
+            px: 2.25,
+            py: 1.5,
             backgroundColor: "#f6f9fc",
             borderTop: "1px solid #dbe4ee"
           }}
@@ -3717,8 +4018,8 @@ function ClientList() {
               color="warning"
               onClick={handlePullOutClient}
               sx={{
-                px: 3,
-                py: 1,
+                px: 2.5,
+                py: 0.8,
                 borderRadius: 2,
                 textTransform: "none",
                 fontWeight: 700
@@ -3731,8 +4032,8 @@ function ClientList() {
             variant="contained"
             onClick={editMode ? handleUpdateClient : handleAddClient}
             sx={{
-              px: 4,
-              py: 1,
+              px: 3.25,
+              py: 0.85,
               borderRadius: 2,
               textTransform: "none",
               fontWeight: 700,
@@ -3748,9 +4049,11 @@ function ClientList() {
         open={openPaymentModal}
         onClose={handleClosePaymentModal}
         fullWidth
-        maxWidth="md"
+        maxWidth={false}
         PaperProps={{
           sx: {
+            width: "94vw",
+            maxWidth: "1400px",
             borderRadius: 4,
             overflow: "hidden",
             background: "#f6f9fc",
@@ -3762,8 +4065,8 @@ function ClientList() {
           sx={{
             background: "linear-gradient(90deg, #14532d, #16a34a)",
             color: "#fff",
-            px: 3.5,
-            py: 2.25,
+            px: 2.1,
+            py: 0.9,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between"
@@ -3771,7 +4074,7 @@ function ClientList() {
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <PaymentIcon />
-            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+            <Typography sx={{ fontSize: "0.86rem", fontWeight: 700, lineHeight: 1.1 }}>
               Payment Acceptance
             </Typography>
           </Box>
@@ -3781,8 +4084,28 @@ function ClientList() {
           </IconButton>
         </Box>
 
-        <DialogContent sx={{ p: 3, backgroundColor: "#f6f9fc" }}>
-          <Paper elevation={0} sx={{ ...formSectionSx, mb: 2 }}>
+        <DialogContent sx={{ p: 1.5, backgroundColor: "#f6f9fc" }}>
+          {paymentReceiptLoading ? (
+            <Box
+              sx={{
+                minHeight: 260,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "column",
+                gap: 1.5,
+                px: 3,
+                py: 6
+              }}
+            >
+              <CircularProgress size={28} thickness={4.5} />
+              <Typography sx={{ fontSize: "0.88rem", color: "#475569", fontWeight: 600 }}>
+                Generating payment reference...
+              </Typography>
+            </Box>
+          ) : (
+          <>
+          <Paper elevation={0} sx={{ ...formSectionSx, p: 1.1, mb: 1.2 }}>
             <Box
               sx={{
                 display: "flex",
@@ -3790,7 +4113,7 @@ function ClientList() {
                 alignItems: { xs: "flex-start", md: "center" },
                 flexDirection: { xs: "column", md: "row" },
                 gap: 1,
-                mb: 2
+                mb: 0.7
               }}
             >
               <Box
@@ -3798,24 +4121,24 @@ function ClientList() {
                   display: "flex",
                   flexWrap: "wrap",
                   alignItems: "center",
-                  gap: 1.5
+                  gap: 1
                 }}
               >
                 <Typography
                   sx={{
-                    fontSize: "0.78rem",
+                    fontSize: "0.58rem",
                     fontWeight: 700,
                     color: "#64748b",
                     textTransform: "uppercase",
-                    letterSpacing: 0.5
+                    letterSpacing: 0.4
                   }}
                 >
                   Account
                 </Typography>
-                <Typography sx={{ fontSize: "1.05rem", fontWeight: 700, color: "#0f172a" }}>
+                <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
                   {selectedClient?.AccountName || "N/A"}
                 </Typography>
-                <Typography sx={{ fontSize: "0.92rem", color: "#64748b" }}>
+                <Typography sx={{ fontSize: "0.7rem", color: "#64748b", lineHeight: 1.1 }}>
                   Account No. {selectedClient?.AccountNumber || "N/A"}
                 </Typography>
               </Box>
@@ -3824,7 +4147,8 @@ function ClientList() {
                 label={hasPaymentEntries ? `${normalizedPaymentEntries.length} PAYMENT ${normalizedPaymentEntries.length === 1 ? "ENTRY" : "ENTRIES"}` : "NO PAYMENT ENTRY"}
                 sx={{
                   borderRadius: "999px",
-                  height: 32,
+                  height: 20,
+                  fontSize: "0.62rem",
                   fontWeight: 700,
                   backgroundColor: "#ecfdf5",
                   color: "#166534"
@@ -3836,12 +4160,12 @@ function ClientList() {
               sx={{
                 display: "grid",
                 gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr 1fr" },
-                gap: 1.5
+                gap: 0.75
               }}
             >
                 {paymentRequiresReconnectFlow ? (
                   <Paper elevation={0} sx={summaryCardSx}>
-                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                       Reconnect Type
                     </Typography>
                     <TextField
@@ -3853,11 +4177,11 @@ function ClientList() {
                       SelectProps={{ displayEmpty: true }}
                       InputProps={{ disableUnderline: true }}
                       sx={{
-                        mt: 0.35,
+                        mt: 0.2,
                         "& .MuiInputBase-input": {
                           px: 0,
-                          py: 0.5,
-                          fontSize: "0.98rem",
+                          py: 0.08,
+                          fontSize: "0.8rem",
                           fontWeight: 700,
                           color: "#0f172a"
                         }
@@ -3873,7 +4197,7 @@ function ClientList() {
                 {paymentRequiresReconnectFlow &&
                 paymentSelectedAuthMode === "IPOE" ? (
                   <Paper elevation={0} sx={summaryCardSx}>
-                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                       MAC Address
                     </Typography>
                     <TextField
@@ -3892,11 +4216,11 @@ function ClientList() {
                       SelectProps={{ displayEmpty: true }}
                       InputProps={{ disableUnderline: true }}
                       sx={{
-                        mt: 0.35,
+                        mt: 0.2,
                         "& .MuiInputBase-input": {
                           px: 0,
-                          py: 0.5,
-                          fontSize: "0.98rem",
+                          py: 0.08,
+                          fontSize: "0.8rem",
                           fontWeight: 700,
                           color: "#0f172a"
                         }
@@ -3913,7 +4237,7 @@ function ClientList() {
                 ) : null}
 
                 <Paper elevation={0} sx={summaryCardSx}>
-                  <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                     Subscription Plan
                   </Typography>
                   {paymentRequiresReconnectFlow ? (
@@ -3926,13 +4250,13 @@ function ClientList() {
                       SelectProps={{ displayEmpty: true }}
                       InputProps={{ disableUnderline: true }}
                       sx={{
-                        mt: 0.35,
+                        mt: 0.2,
                         "& .MuiInputBase-input": {
                           px: 0,
-                          py: 0.5,
-                          fontSize: "0.98rem",
-                          fontWeight: 700,
-                          color: "#0f172a"
+                            py: 0.08,
+                            fontSize: "0.8rem",
+                            fontWeight: 700,
+                            color: "#0f172a"
                         }
                       }}
                     >
@@ -3944,14 +4268,14 @@ function ClientList() {
                         ))}
                     </TextField>
                   ) : (
-                    <Typography sx={{ mt: 0.6, fontSize: "0.98rem", fontWeight: 700, color: "#0f172a" }}>
+                    <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
                       {displayedPaymentPlan}
                     </Typography>
                   )}
                 </Paper>
 
               <Paper elevation={0} sx={summaryCardSx}>
-                <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                   Payment Reference
                 </Typography>
                 <TextField
@@ -3962,11 +4286,11 @@ function ClientList() {
                   variant="standard"
                   InputProps={{ disableUnderline: true }}
                   sx={{
-                    mt: 0.4,
+                    mt: 0.2,
                     "& .MuiInputBase-input": {
                       px: 0,
-                      py: 0.5,
-                      fontSize: "0.98rem",
+                      py: 0.08,
+                      fontSize: "0.8rem",
                       fontWeight: 700,
                       color: "#0f172a"
                     }
@@ -3975,10 +4299,10 @@ function ClientList() {
               </Paper>
 
               <Paper elevation={0} sx={summaryCardSx}>
-                <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                   Due Date
                 </Typography>
-                <Typography sx={{ mt: 0.6, fontSize: "0.98rem", fontWeight: 700, color: "#0f172a" }}>
+                <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
                   {selectedClient?.DueDate
                     ? new Date(selectedClient.DueDate).toLocaleDateString("en-PH", {
                         year: "numeric",
@@ -3990,10 +4314,10 @@ function ClientList() {
               </Paper>
 
                 <Paper elevation={0} sx={summaryCardSx}>
-                  <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                     SubTotal
                   </Typography>
-                  <Typography sx={{ mt: 0.6, fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
+                  <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
                     PHP {planAmount}
                   </Typography>
                 </Paper>
@@ -4003,12 +4327,12 @@ function ClientList() {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "0.95fr 1.05fr" },
+              gridTemplateColumns: { xs: "1fr", xl: "0.82fr 0.76fr 1.12fr" },
               gap: 2
             }}
           >
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, fontSize: "1rem", mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
                 Receipt Details
               </Typography>
 
@@ -4037,7 +4361,7 @@ function ClientList() {
             </Paper>
 
             <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, fontSize: "1rem", mb: 1.5, color: "#0f172a" }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
                 Payment Breakdown
               </Typography>
 
@@ -4051,7 +4375,7 @@ function ClientList() {
                   }
                 }}
               >
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Additional Charge
                 </Typography>
                 <TextField
@@ -4062,7 +4386,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   VAT
                 </Typography>
                 <TextField
@@ -4072,7 +4396,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Discount / Others
                 </Typography>
                 <TextField
@@ -4083,7 +4407,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", fontWeight: 700, alignSelf: "center", color: "#0f172a" }}>
+                <Typography sx={{ fontSize: "10px", fontWeight: 700, alignSelf: "center", color: "#0f172a" }}>
                   Total Amount to Pay
                 </Typography>
                 <TextField
@@ -4093,7 +4417,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Ending Balance
                 </Typography>
                 <TextField
@@ -4103,7 +4427,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Payment Received Total
                 </Typography>
                 <TextField
@@ -4113,7 +4437,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Sales Invoice
                 </Typography>
                 <TextField
@@ -4124,42 +4448,7 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
-                  Payment Entries
-                </Typography>
-                <Button
-                  variant="outlined"
-                  onClick={handleOpenPaymentEntriesModal}
-                  sx={{
-                    justifyContent: "flex-start",
-                    textTransform: "none",
-                    fontWeight: 700,
-                    borderRadius: 2,
-                    py: 1.6
-                  }}
-                >
-                  {hasPaymentEntries
-                    ? `${normalizedPaymentEntries.length} payment entr${normalizedPaymentEntries.length === 1 ? "y" : "ies"}`
-                    : "Add payment entries"}
-                </Button>
-
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
-                  Entry Summary
-                </Typography>
-                <TextField
-                  value={
-                    hasPaymentEntries
-                      ? normalizedPaymentEntries
-                          .map((entry) => `${entry.method}: PHP ${entry.amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
-                          .join(" | ")
-                      : "-"
-                  }
-                  fullWidth
-                  InputProps={{ readOnly: true }}
-                  sx={compactFieldSx}
-                />
-
-                <Typography sx={{ fontSize: "12px", alignSelf: "center", color: "#475569" }}>
+                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
                   Contact Number
                 </Typography>
                 <TextField
@@ -4172,7 +4461,227 @@ function ClientList() {
                 />
               </Box>
             </Paper>
+
+            <Paper elevation={0} sx={{ ...formSectionSx, display: "grid", gap: 1.5 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 1,
+                  flexWrap: "wrap"
+                }}
+              >
+                <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>
+                  Payment Entries
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={handleAddPaymentEntry}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  Add Entry
+                </Button>
+              </Box>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff"
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 1
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a" }}>
+                    Receipt Upload
+                  </Typography>
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={clearReceiptUpload}
+                    sx={{ textTransform: "none", borderRadius: 2, fontWeight: 700 }}
+                  >
+                    Clear
+                  </Button>
+                </Box>
+
+                <Typography sx={{ fontSize: "12px", mb: 0.5, color: "#334155" }}>
+                  Drag a GCash, PayMaya, or bank receipt image here
+                </Typography>
+
+                <Typography sx={{ fontSize: "12px", mb: 1.5, color: "text.secondary" }}>
+                  Or click here and press Ctrl+V to paste a copied receipt image
+                </Typography>
+
+                <Box
+                  tabIndex={0}
+                  onPaste={handleReceiptPaste}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    const file = e.dataTransfer.files?.[0];
+                    processReceiptImage(file);
+                  }}
+                  sx={{
+                    border: "2px dashed",
+                    borderColor: dragActive ? "#2563eb" : "#cbd5e1",
+                    borderRadius: 3,
+                    p: 2,
+                    textAlign: "center",
+                    backgroundColor: dragActive ? "#eff6ff" : "#f8fafc",
+                    outline: "none",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    sx={{ textTransform: "none", borderRadius: 2, fontWeight: 700 }}
+                  >
+                    Choose Image
+                    <input
+                      hidden
+                      accept="image/*"
+                      type="file"
+                      onChange={(e) => processReceiptImage(e.target.files?.[0])}
+                    />
+                  </Button>
+
+                  {receiptPreview && (
+                    <Box sx={{ mt: 2 }}>
+                      <Box
+                        component="img"
+                        src={receiptPreview}
+                        alt="Receipt preview"
+                        sx={{
+                          maxWidth: "100%",
+                          maxHeight: 180,
+                          borderRadius: 2,
+                          border: "1px solid #dbe4ee",
+                          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)"
+                        }}
+                      />
+                    </Box>
+                  )}
+
+                  {(ocrLoading || ocrMessage) && (
+                    <Typography sx={{ fontSize: "12px", mt: 1.25, color: "text.secondary" }}>
+                      {ocrLoading ? "Scanning receipt image..." : ocrMessage}
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+
+              <Box sx={{ display: "grid", gap: 1.25 }}>
+                {paymentEntries.map((entry, index) => (
+                  <Paper
+                    key={`payment-entry-${index}`}
+                    elevation={0}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 3,
+                      border: "1px solid #dbe4ee",
+                      backgroundColor: "#fff"
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", md: "1.05fr 0.85fr 1.05fr auto" },
+                        gap: 1,
+                        alignItems: "center"
+                      }}
+                    >
+                      <TextField
+                        select
+                        label="Mode of Payment"
+                        value={entry.method}
+                        onChange={(event) =>
+                          handlePaymentEntryChange(index, "method", event.target.value)
+                        }
+                      >
+                        <MenuItem value="CASH">CASH</MenuItem>
+                        <MenuItem value="GCASH">GCASH</MenuItem>
+                        <MenuItem value="PAYMAYA">PAYMAYA</MenuItem>
+                        <MenuItem value="BANK">BANK</MenuItem>
+                      </TextField>
+
+                      <TextField
+                        label="Amount"
+                        value={entry.amount}
+                        onChange={(event) =>
+                          handlePaymentEntryChange(index, "amount", event.target.value)
+                        }
+                      />
+
+                      <TextField
+                        label="Reference"
+                        value={entry.reference}
+                        onChange={(event) =>
+                          handlePaymentEntryChange(index, "reference", event.target.value)
+                        }
+                        disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        helperText={
+                          normalizePaymentLineMethod(entry.method) === "CASH"
+                            ? "Not required for cash"
+                            : "Required for non-cash"
+                        }
+                      />
+
+                      <Button
+                        color="error"
+                        variant="outlined"
+                        onClick={() => handleRemovePaymentEntry(index)}
+                        sx={{ textTransform: "none", fontWeight: 700, minWidth: 92 }}
+                      >
+                        Remove
+                      </Button>
+                    </Box>
+                  </Paper>
+                ))}
+              </Box>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 1.25,
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff"
+                }}
+              >
+                <Typography sx={{ fontSize: "0.7rem", color: "#64748b", fontWeight: 700 }}>
+                  TOTAL RECEIVED
+                </Typography>
+                <Typography sx={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>
+                  PHP {totalPaymentReceived.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              </Paper>
+            </Paper>
           </Box>
+          </>
+          )}
         </DialogContent>
 
         <DialogActions
@@ -4193,6 +4702,7 @@ function ClientList() {
             variant="contained"
             color="success"
             onClick={handleSavePayment}
+            disabled={paymentReceiptLoading}
             sx={{
               px: 4,
               py: 1,
@@ -5217,3 +5727,4 @@ function ClientList() {
 }
 
 export default ClientList;
+

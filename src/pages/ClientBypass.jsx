@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   IconButton,
-  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -145,23 +145,57 @@ export default function ClientBypass() {
           <CardContent sx={{ p: 3 }}>
             <Stack component="form" spacing={2} onSubmit={handleSubmit}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                <TextField
-                  select
-                  label="Client Account"
-                  value={form.clientId}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, clientId: event.target.value }))
+                <Autocomplete
+                  options={bypassEligibleClients}
+                  value={
+                    bypassEligibleClients.find(
+                      (client) => String(client._id) === String(form.clientId)
+                    ) || null
+                  }
+                  onChange={(_event, value) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      clientId: value?._id || ""
+                    }))
                   }
                   fullWidth
-                  required
-                  helperText="Select one client account."
-                >
-                  {bypassEligibleClients.map((client) => (
-                    <MenuItem key={client._id} value={client._id}>
-                      {client.AccountName} - {client.ClientName || "No Client Name"}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  autoHighlight
+                  getOptionLabel={(option) =>
+                    `${option.AccountName || ""} - ${option.ClientName || "No Client Name"}`
+                  }
+                  isOptionEqualToValue={(option, value) =>
+                    String(option._id) === String(value._id)
+                  }
+                  filterOptions={(options, state) => {
+                    const keyword = String(state.inputValue || "")
+                      .trim()
+                      .toLowerCase();
+
+                    if (!keyword) {
+                      return options;
+                    }
+
+                    return options.filter((option) =>
+                      [
+                        option.AccountName,
+                        option.ClientName,
+                        option.AccountNumber
+                      ]
+                        .filter(Boolean)
+                        .join(" ")
+                        .toLowerCase()
+                        .includes(keyword)
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Client Account"
+                      required
+                      helperText="Type account name or client name to search."
+                    />
+                  )}
+                />
 
                 <TextField
                   label="Notes"

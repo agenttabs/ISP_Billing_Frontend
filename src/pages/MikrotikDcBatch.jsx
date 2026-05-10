@@ -7,6 +7,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   Stack,
   Switch,
@@ -26,6 +30,7 @@ import PageHeader from "../layout/PageHeader";
 const defaultConfig = {
   Name: "Mikrotik DC Batch",
   SendTime: "09:00",
+  GraceDays: 15,
   IsActive: false,
   DisconnectedPlanName: "disconnection",
   LastRunAt: null,
@@ -69,6 +74,7 @@ export default function MikrotikDcBatch() {
   const [success, setSuccess] = useState("");
   const [config, setConfig] = useState(defaultConfig);
   const [report, setReport] = useState(null);
+  const [confirmRunOpen, setConfirmRunOpen] = useState(false);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -92,13 +98,19 @@ export default function MikrotikDcBatch() {
   const previewBatch = async () => {
     try {
       setPreviewing(true);
-      const response = await API.get("/mikrotik-dc-batch/report");
+      const response = await API.get("/mikrotik-dc-batch/report", {
+        params: {
+          GraceDays: config.GraceDays,
+          SendTime: config.SendTime,
+          DisconnectedPlanName: config.DisconnectedPlanName
+        }
+      });
       setReport(response.data);
       setError("");
-      setSuccess("MikroTik disconnected preview loaded.");
+      setSuccess("MikroTik DC batch preview loaded.");
     } catch (err) {
       setSuccess("");
-      setError(err.response?.data?.error || "Failed to preview MikroTik disconnected clients.");
+      setError(err.response?.data?.error || "Failed to preview MikroTik DC batch clients.");
     } finally {
       setPreviewing(false);
     }
@@ -125,7 +137,11 @@ export default function MikrotikDcBatch() {
   const runNow = async () => {
     try {
       setRunningNow(true);
-      const response = await API.post("/mikrotik-dc-batch/run-now");
+      const response = await API.post("/mikrotik-dc-batch/run-now", {
+        GraceDays: config.GraceDays,
+        SendTime: config.SendTime,
+        DisconnectedPlanName: config.DisconnectedPlanName
+      });
       if (response.data?.report) {
         setReport(response.data.report);
       }
@@ -145,14 +161,31 @@ export default function MikrotikDcBatch() {
     }
   };
 
-  const summary = report?.summary || {};
+  const openRunConfirm = () => {
+    setConfirmRunOpen(true);
+  };
+
+  const closeRunConfirm = () => {
+    if (runningNow) return;
+    setConfirmRunOpen(false);
+  };
+
+  const confirmRunNow = async () => {
+    await runNow();
+    setConfirmRunOpen(false);
+  };
+
+  const visibleRows = (report?.rows || []).filter(
+    (row) => String(row?.result || "").toUpperCase() !== "ALREADY_DISCONNECTED"
+  );
+  const hasRunnableRows = visibleRows.length > 0;
 
   return (
     <Box>
       <Stack spacing={3}>
         <PageHeader
           title="Mikrotik DC Batch"
-          subtitle="Check MikroTik for disconnected PPPOE and IPOE clients, then switch the client plan in the system collection."
+          subtitle="Disconnect overdue unpaid PPPOE and IPOE clients after the grace period, while skipping bypass accounts."
         />
 
         {error ? <Alert severity="error">{error}</Alert> : null}
@@ -180,6 +213,20 @@ export default function MikrotikDcBatch() {
                         DisconnectedPlanName: event.target.value
                       }))
                     }
+                    fullWidth
+                  />
+
+                  <TextField
+                    label="Days Before Disconnection"
+                    type="number"
+                    value={config.GraceDays ?? 15}
+                    onChange={(event) =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        GraceDays: event.target.value
+                      }))
+                    }
+                    inputProps={{ min: 0 }}
                     fullWidth
                   />
 
@@ -238,8 +285,8 @@ export default function MikrotikDcBatch() {
                   <Button
                     variant="contained"
                     startIcon={runningNow ? <CircularProgress size={16} color="inherit" /> : <SyncAltIcon />}
-                    onClick={runNow}
-                    disabled={runningNow}
+                    onClick={openRunConfirm}
+                    disabled={runningNow || !hasRunnableRows}
                   >
                     {runningNow ? "Running..." : "Run Now"}
                   </Button>
@@ -254,36 +301,9 @@ export default function MikrotikDcBatch() {
             <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
               <Card sx={{ flex: 1, borderRadius: 4 }}>
                 <CardContent sx={{ p: 3 }}>
-                  <Typography color="text.secondary">Checked Clients</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    {summary.checkedCount || 0}
-                  </Typography>
-                </CardContent>
-              </Card>
-
-              <Card sx={{ flex: 1, borderRadius: 4 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography color="text.secondary">Disconnected in MikroTik</Typography>
+                  <Typography color="text.secondary">Record Count</Typography>
                   <Typography variant="h4" sx={{ fontWeight: 800, color: "#c2410c" }}>
-                    {summary.disconnectedFoundCount || 0}
-                  </Typography>
-                </CardContent>
-              </Card>
-
-              <Card sx={{ flex: 1, borderRadius: 4 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography color="text.secondary">Updated in System</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800, color: "#166534" }}>
-                    {summary.updatedCount || 0}
-                  </Typography>
-                </CardContent>
-              </Card>
-
-              <Card sx={{ flex: 1, borderRadius: 4 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography color="text.secondary">Already Disconnected</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800, color: "#b45309" }}>
-                    {summary.alreadyDisconnectedCount || 0}
+                    {visibleRows.length}
                   </Typography>
                 </CardContent>
               </Card>
@@ -309,14 +329,14 @@ export default function MikrotikDcBatch() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(report.rows || []).length === 0 ? (
+                    {visibleRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} align="center">
-                          No disconnected MikroTik client needs an update right now.
+                          No overdue non-bypass client needs a disconnect right now.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      (report.rows || []).map((row, index) => {
+                      visibleRows.map((row, index) => {
                         const chip = getResultChip(row.result);
 
                         return (
@@ -350,6 +370,23 @@ export default function MikrotikDcBatch() {
           </>
         ) : null}
       </Stack>
+
+      <Dialog open={confirmRunOpen} onClose={closeRunConfirm} maxWidth="xs" fullWidth>
+        <DialogTitle>Run DC Batch</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: "#334155" }}>
+            Are you sure you want to run the MikroTik DC Batch now?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRunConfirm} disabled={runningNow}>
+            Cancel
+          </Button>
+          <Button onClick={confirmRunNow} variant="contained" disabled={runningNow}>
+            {runningNow ? "Running..." : "Yes, Run Now"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

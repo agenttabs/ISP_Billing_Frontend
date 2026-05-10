@@ -115,7 +115,7 @@ export default function BillingStatementContent({
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("DNS INTERNET", 18, 14);
+    doc.text("DNS NETWORKS", 18, 14);
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(statementTitle, 18, 22);
@@ -176,7 +176,7 @@ export default function BillingStatementContent({
     const latestPaymentLines = latestPayment
       ? [
           `Date: ${formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}`,
-          `Receipt: ${latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}`,
+          `${latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}`,
           `Amount: ${formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}`
         ]
       : ["No payment history found for this account yet."];
@@ -247,7 +247,7 @@ export default function BillingStatementContent({
 
       <Box sx={{ p: { xs: 3, md: 5 } }}>
         <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4 }, background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #60a5fa 100%)", color: "#fff", borderRadius: 4, mb: 3 }}>
-          <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>DNS INTERNET</Typography>
+          <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>DNS NETWORKS</Typography>
           <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1, mt: 0.75 }}>{statementMonth}</Typography>
           <Typography sx={{ mt: 1, opacity: 0.9 }}>Billing Statement</Typography>
         </Box>
@@ -314,7 +314,7 @@ export default function BillingStatementContent({
           {latestPayment ? (
             <Stack spacing={1.1}>
               <Typography><strong>Date:</strong> {formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}</Typography>
-              <Typography><strong>Receipt:</strong> {latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}</Typography>
+              <Typography>{latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}</Typography>
               <Typography><strong>Amount:</strong> {formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}</Typography>
             </Stack>
           ) : (

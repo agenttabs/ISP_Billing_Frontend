@@ -381,11 +381,17 @@ export default function TransactionVerification() {
   const [pdfPassword, setPdfPassword] = useState("");
   const [pdfSummary, setPdfSummary] = useState("");
   const [pdfReferences, setPdfReferences] = useState([]);
+  const [filterDate, setFilterDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
 
-  const loadRecords = async () => {
+  const loadRecords = async (options = {}) => {
     try {
       setLoading(true);
-      const { data } = await API.get("/transaction-verification");
+      const nextFilterDate =
+        options.filterDate !== undefined ? options.filterDate : filterDate;
+      const params = { date: nextFilterDate };
+      const { data } = await API.get("/transaction-verification", { params });
       setRecords(Array.isArray(data?.records) ? data.records : []);
       setVerifiedDrafts({});
       setPdfAnalysis({});
@@ -584,7 +590,7 @@ export default function TransactionVerification() {
         records: payload
       });
 
-      await loadRecords();
+      await loadRecords({ filterDate });
       setPdfSummary("");
       setPdfReferences([]);
       setPdfAnalysis({});
@@ -644,7 +650,7 @@ export default function TransactionVerification() {
               <Typography sx={{ color: "#64748b", fontSize: 14 }}>
                 {loading
                   ? "Loading pending records..."
-                  : `${records.length} payment record(s) still waiting for verification.`}
+                  : `${records.length} payment record(s) still waiting for verification for ${filterDate}.`}
               </Typography>
             </CardContent>
           </Card>
@@ -660,6 +666,49 @@ export default function TransactionVerification() {
             </CardContent>
           </Card>
         </Stack>
+
+        <Paper
+          sx={{
+            p: { xs: 2, md: 2.5 },
+            borderRadius: 4,
+            border: "1px solid #dbe4ee",
+            boxShadow: "0 14px 30px rgba(15, 23, 42, 0.06)"
+          }}
+        >
+          <Stack spacing={2}>
+            <Box>
+              <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                Verification Date Filter
+              </Typography>
+              <Typography sx={{ color: "#64748b", fontSize: 14, mt: 0.5 }}>
+                Review unverified non-cash payments for the selected date. The page defaults to today.
+              </Typography>
+            </Box>
+
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={1.5}
+              alignItems={{ xs: "stretch", md: "center" }}
+            >
+              <TextField
+                label="Payment Date"
+                type="date"
+                value={filterDate}
+                onChange={(event) => setFilterDate(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: { xs: "100%", md: 220 } }}
+              />
+
+              <Button
+                variant="contained"
+                onClick={() => loadRecords({ filterDate })}
+                disabled={loading || processingPdf || saving || !filterDate}
+              >
+                Apply Filter
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
 
         <Paper
           sx={{
@@ -754,7 +803,7 @@ export default function TransactionVerification() {
                 <TableCell>Amount</TableCell>
                 <TableCell>GCash Ref</TableCell>
                 <TableCell>Receipt No.</TableCell>
-                <TableCell>Payment Date</TableCell>
+                <TableCell>Transaction Date</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Comment</TableCell>
               </TableRow>
@@ -802,7 +851,7 @@ export default function TransactionVerification() {
                       <TableCell>{formatCurrency(record.VerificationAmount ?? record.TotalAmount)}</TableCell>
                       <TableCell>{record.VerificationReference || record.MOPRef || record.MatchReference || "-"}</TableCell>
                       <TableCell>{record.PaymentReceipt || record.Invoice || "-"}</TableCell>
-                      <TableCell>{formatDateTime(record.PaymentDate || record.TransactionDate)}</TableCell>
+                      <TableCell>{formatDateTime(record.TransactionDate || record.PaymentDate)}</TableCell>
                       <TableCell>
                         {isPdfMatched ? (
                           <Chip size="small" color="success" label="Matched in PDF" />

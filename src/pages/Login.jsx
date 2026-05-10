@@ -38,19 +38,26 @@ export default function Login() {
         minHeight: "100vh",
         display: "grid",
         placeItems: "center",
-        p: 3,
+        p: 2,
         background:
           "radial-gradient(circle at top left, rgba(29,78,216,0.18), transparent 35%), linear-gradient(135deg, #eff6ff, #f8fafc)"
       }}
     >
-      <Card sx={{ width: "100%", maxWidth: 460, borderRadius: 5, boxShadow: 8 }}>
-        <CardContent sx={{ p: 4 }}>
-          <Stack spacing={3} component="form" onSubmit={handleSubmit}>
-            <Stack spacing={1} alignItems="center">
+      <Card
+        sx={{
+          width: "100%",
+          maxWidth: 380,
+          borderRadius: 4,
+          boxShadow: "0 10px 28px rgba(15, 23, 42, 0.16)"
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Stack spacing={2.25} component="form" onSubmit={handleSubmit}>
+            <Stack spacing={0.75} alignItems="center">
               <Box
                 sx={{
-                  width: 58,
-                  height: 58,
+                  width: 48,
+                  height: 48,
                   borderRadius: "50%",
                   display: "grid",
                   placeItems: "center",
@@ -58,12 +65,12 @@ export default function Login() {
                   color: "#1d4ed8"
                 }}
               >
-                <LockOutlinedIcon />
+                <LockOutlinedIcon sx={{ fontSize: 24 }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
                 Sign In
               </Typography>
-              <Typography color="text.secondary" align="center">
+              <Typography color="text.secondary" align="center" sx={{ fontSize: "0.9rem", maxWidth: 300 }}>
                 Use your credential account to open the ISP billing dashboard.
               </Typography>
             </Stack>
@@ -78,6 +85,7 @@ export default function Login() {
               }
               fullWidth
               required
+              size="small"
             />
 
             <TextField
@@ -89,14 +97,14 @@ export default function Login() {
               }
               fullWidth
               required
+              size="small"
             />
 
             <Button
               type="submit"
               variant="contained"
-              size="large"
               disabled={loading}
-              sx={{ py: 1.4, borderRadius: 3, fontWeight: 700 }}
+              sx={{ py: 1.05, borderRadius: 2.5, fontWeight: 700 }}
             >
               {loading ? "Signing In..." : "Login"}
             </Button>

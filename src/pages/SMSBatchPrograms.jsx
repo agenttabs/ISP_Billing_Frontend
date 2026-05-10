@@ -6,6 +6,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Switch,
@@ -20,6 +24,8 @@ import {
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import ScheduleSendOutlinedIcon from "@mui/icons-material/ScheduleSendOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 
@@ -57,8 +63,22 @@ export default function SMSBatchPrograms() {
   const [form, setForm] = useState(defaultForm);
   const [editingProgram, setEditingProgram] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [runNowId, setRunNowId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [selectedProgram, setSelectedProgram] = useState(null);
+  const [recipientRows, setRecipientRows] = useState([]);
+
+  const formatDateTime = (value) => {
+    if (!value) return "-";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+
+    return date.toLocaleString("en-PH");
+  };
 
   const loadPrograms = async () => {
     try {
@@ -138,6 +158,49 @@ export default function SMSBatchPrograms() {
     setForm(defaultForm);
     setError("");
     setSuccess("");
+  };
+
+  const handleViewRecipients = async (program) => {
+    try {
+      setViewLoading(true);
+      setSelectedProgram(program);
+      setViewDialogOpen(true);
+      const { data } = await API.get(`/sms-batch-programs/${program._id}/recipients`);
+      setRecipientRows(data?.recipients || []);
+      setError("");
+    } catch (err) {
+      setRecipientRows([]);
+      setSuccess("");
+      setError(err.response?.data?.error || "Failed to load batch recipient list.");
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const handleCloseViewDialog = () => {
+    setViewDialogOpen(false);
+    setSelectedProgram(null);
+    setRecipientRows([]);
+    setViewLoading(false);
+  };
+
+  const handleRunNow = async (program) => {
+    try {
+      setRunNowId(String(program?._id || ""));
+      setError("");
+      setSuccess("");
+
+      const { data } = await API.post(`/sms-batch-programs/${program._id}/run-now`);
+      setSuccess(
+        data?.reason ||
+          `Batch run finished. Sent ${data?.sent || 0}, skipped ${data?.skipped || 0}.`
+      );
+    } catch (err) {
+      setSuccess("");
+      setError(err.response?.data?.error || "Failed to run SMS batch now.");
+    } finally {
+      setRunNowId("");
+    }
   };
 
   return (
@@ -387,14 +450,33 @@ export default function SMSBatchPrograms() {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Button
-                          variant="outlined"
-                          startIcon={<EditOutlinedIcon />}
-                          onClick={() => handleEdit(program)}
-                          sx={{ textTransform: "none", fontWeight: 700 }}
-                        >
-                          Edit
-                        </Button>
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button
+                            variant="contained"
+                            startIcon={<PlayArrowOutlinedIcon />}
+                            onClick={() => handleRunNow(program)}
+                            disabled={runNowId === String(program._id)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            {runNowId === String(program._id) ? "Running..." : "Run Now"}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            startIcon={<VisibilityOutlinedIcon />}
+                            onClick={() => handleViewRecipients(program)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            View List
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            startIcon={<EditOutlinedIcon />}
+                            onClick={() => handleEdit(program)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Edit
+                          </Button>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))
@@ -404,6 +486,79 @@ export default function SMSBatchPrograms() {
           </CardContent>
         </Card>
       </Stack>
+
+      <Dialog
+        open={viewDialogOpen}
+        onClose={handleCloseViewDialog}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle>
+          {selectedProgram?.Name ? `${selectedProgram.Name} Recipient List` : "Batch Recipient List"}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography sx={{ color: "#475569" }}>
+              This shows the clients that match the current batch rule for today.
+            </Typography>
+
+            {viewLoading ? (
+              <Typography>Loading recipients...</Typography>
+            ) : (
+              <>
+                <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                  Total Recipients: {recipientRows.length}
+                </Typography>
+
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Client Name</TableCell>
+                      <TableCell>Account Name</TableCell>
+                      <TableCell>Account Number</TableCell>
+                      <TableCell>Contact Number</TableCell>
+                      <TableCell>Due Date</TableCell>
+                      <TableCell>Amount Due</TableCell>
+                      <TableCell>Payment Status</TableCell>
+                      <TableCell>Net Plan</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recipientRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} align="center">
+                          No recipients found for this batch today.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      recipientRows.map((row) => (
+                        <TableRow key={String(row._id || row.AccountNumber || row.AccountName)}>
+                          <TableCell>{row.ClientName}</TableCell>
+                          <TableCell>{row.AccountName}</TableCell>
+                          <TableCell>{row.AccountNumber}</TableCell>
+                          <TableCell>{row.ContactNumber}</TableCell>
+                          <TableCell>{formatDateTime(row.DueDate)}</TableCell>
+                          <TableCell>
+                            {Number(row.AmountDue || 0).toLocaleString("en-PH", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            })}
+                          </TableCell>
+                          <TableCell>{row.PaymentStatus}</TableCell>
+                          <TableCell>{row.NetPlan}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseViewDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

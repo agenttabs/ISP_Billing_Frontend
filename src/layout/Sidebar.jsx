@@ -26,11 +26,12 @@ import {
   MiscellaneousServicesOutlined,
   ScheduleSendOutlined,
   EmailOutlined,
+  SettingsInputAntennaOutlined,
   PrintOutlined,
-  PowerSettingsNewOutlined,
   ReceiptLongOutlined,
   FactCheckOutlined,
   RouterOutlined,
+  SettingsEthernetOutlined,
   ShieldOutlined,
   SettingsSuggestOutlined,
   FmdGoodOutlined,
@@ -52,6 +53,9 @@ export default function Sidebar() {
   const [open, setOpen] = useState(true);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [mikrotikOpen, setMikrotikOpen] = useState(false);
+  const [transactionOpen, setTransactionOpen] = useState(false);
   const unpaidCount = clients.filter(
     (c) => (c.PaymentStatus || "").toUpperCase() !== "PAID"
   ).length;
@@ -103,34 +107,10 @@ export default function Sidebar() {
       roles: ["ADMIN"]
     },
     {
-      text: "SMS Template",
-      path: "/sms-recepients",
-      icon: <SmsOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
-      text: "SMS Batch Program",
-      path: "/sms-batch-programs",
-      icon: <ScheduleSendOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
-      text: "Email Notification",
-      path: "/email-notification",
-      icon: <EmailOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
       text: "Netplan",
       path: "/netplans-maintenance",
       icon: <RouterOutlined />,
       roles: ["ADMIN"]
-    },
-    {
-      text: "Expenses Input",
-      path: "/expense-input",
-      icon: <ReceiptLongOutlined />,
-      roles: ["ADMIN", "CASHIER"]
     },
     {
       text: "Print Receipt",
@@ -145,6 +125,69 @@ export default function Sidebar() {
       roles: ["ADMIN"]
     },
     {
+      text: "NAP",
+      path: "/nap",
+      icon: <FmdGoodOutlined />,
+      roles: ["ADMIN", "TECHNICIAN"]
+    },
+    {
+      text: "System Diagnostics",
+      path: "/system-diagnostics",
+      icon: <SettingsSuggestOutlined />,
+      roles: ["ADMIN"]
+    }
+  ].filter((item) => item.roles.includes(userType));
+
+  const transactionMenu = [
+    {
+      text: "Expense",
+      path: "/expense-input",
+      icon: <ReceiptLongOutlined />,
+      roles: ["ADMIN", "CASHIER"]
+    },
+    {
+      text: "Verification",
+      path: "/transaction-verification",
+      icon: <FactCheckOutlined />,
+      roles: ["ADMIN"]
+    }
+  ].filter((item) => item.roles.includes(userType));
+
+  const notificationMenu = [
+    {
+      text: "SMS Template",
+      path: "/sms-recepients",
+      icon: <SmsOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "SMS Collection",
+      path: "/sms-collection",
+      icon: <SettingsInputAntennaOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "SMS Batch Program",
+      path: "/sms-batch-programs",
+      icon: <ScheduleSendOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "Email Notification",
+      path: "/email-notification",
+      icon: <EmailOutlined />,
+      roles: ["ADMIN"]
+    }
+  ].filter((item) => item.roles.includes(userType));
+
+  const mikrotikMenu = [
+    {
+      text: "Connection",
+      path: "/mikrotik-connections",
+      icon: <SettingsEthernetOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
       text: "Mikrotik Checker",
       path: "/mikrotik-checker",
       icon: <RouterOutlined />,
@@ -154,30 +197,6 @@ export default function Sidebar() {
       text: "Mikrotik DC Batch",
       path: "/mikrotik-dc-batch",
       icon: <ScheduleSendOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
-      text: "Mikrotik Due Disconnect",
-      path: "/mikrotik-due-disconnect-batch",
-      icon: <PowerSettingsNewOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
-      text: "NAP",
-      path: "/nap",
-      icon: <FmdGoodOutlined />,
-      roles: ["ADMIN", "TECHNICIAN"]
-    },
-    {
-      text: "Transaction Verification",
-      path: "/transaction-verification",
-      icon: <FactCheckOutlined />,
-      roles: ["ADMIN"]
-    },
-    {
-      text: "System Diagnostics",
-      path: "/system-diagnostics",
-      icon: <SettingsSuggestOutlined />,
       roles: ["ADMIN"]
     }
   ].filter((item) => item.roles.includes(userType));
@@ -197,7 +216,8 @@ export default function Sidebar() {
         to={item.path}
         sx={{
           mx: 1,
-          my: 0.5,
+          my: 0.25,
+          minHeight: 40,
           borderRadius: 2,
           position: "relative",
           background: active ? "rgba(99,102,241,0.12)" : "transparent",
@@ -222,7 +242,7 @@ export default function Sidebar() {
 
         <ListItemIcon
           sx={{
-            minWidth: 40,
+            minWidth: 36,
             color: active ? "#6366f1" : "#6b7280"
           }}
         >
@@ -233,7 +253,17 @@ export default function Sidebar() {
           <ListItemText
             primary={item.text}
             primaryTypographyProps={{
-              fontWeight: active ? 600 : 500
+              fontWeight: active ? 600 : 500,
+              fontSize: "0.88rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
             }}
           />
         )}
@@ -252,46 +282,58 @@ export default function Sidebar() {
   const logoutButton = (
     <ListItemButton
       onClick={handleLogout}
-      sx={{
-        mx: 1,
-        mt: 1,
-        borderRadius: 2,
-        color: "#b91c1c",
+        sx={{
+          mx: 1,
+          mt: 1,
+          minHeight: 40,
+          borderRadius: 2,
+          color: "#b91c1c",
         "&:hover": {
           background: "rgba(185,28,28,0.08)"
         }
       }}
     >
-      <ListItemIcon sx={{ minWidth: 40, color: "#b91c1c" }}>
+      <ListItemIcon sx={{ minWidth: 36, color: "#b91c1c" }}>
         <LogoutOutlined />
       </ListItemIcon>
-      {open && <ListItemText primary="Sign out" />}
+      {open && <ListItemText primary="Sign out" primaryTypographyProps={{ fontSize: "0.88rem" }} />}
     </ListItemButton>
   );
 
   const servicesButton = (
     <ListItemButton
       onClick={() => setServicesOpen((prev) => !prev)}
-      sx={{
-        mx: 1,
-        my: 0.5,
-        borderRadius: 2,
-        color: "#475569",
+        sx={{
+          mx: 1,
+          my: 0.25,
+          minHeight: 40,
+          borderRadius: 2,
+          color: "#475569",
         "&:hover": {
           background: "rgba(0,0,0,0.05)"
         }
       }}
     >
-      <ListItemIcon sx={{ minWidth: 40, color: "#64748b" }}>
+      <ListItemIcon sx={{ minWidth: 36, color: "#64748b" }}>
         <MiscellaneousServicesOutlined />
       </ListItemIcon>
 
       {open ? (
         <>
           <ListItemText
-            primary="Services"
+            primary="System"
             primaryTypographyProps={{
-              fontWeight: 700
+              fontWeight: 700,
+              fontSize: "0.88rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
             }}
           />
           {servicesOpen ? <ExpandLess /> : <ExpandMore />}
@@ -303,17 +345,18 @@ export default function Sidebar() {
   const reportsButton = (
     <ListItemButton
       onClick={() => setReportsOpen((prev) => !prev)}
-      sx={{
-        mx: 1,
-        my: 0.5,
-        borderRadius: 2,
-        color: "#475569",
+        sx={{
+          mx: 1,
+          my: 0.25,
+          minHeight: 40,
+          borderRadius: 2,
+          color: "#475569",
         "&:hover": {
           background: "rgba(0,0,0,0.05)"
         }
       }}
     >
-      <ListItemIcon sx={{ minWidth: 40, color: "#64748b" }}>
+      <ListItemIcon sx={{ minWidth: 36, color: "#64748b" }}>
         <AssessmentOutlined />
       </ListItemIcon>
 
@@ -322,7 +365,17 @@ export default function Sidebar() {
           <ListItemText
             primary="Report"
             primaryTypographyProps={{
-              fontWeight: 700
+              fontWeight: 700,
+              fontSize: "0.88rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
             }}
           />
           {reportsOpen ? <ExpandLess /> : <ExpandMore />}
@@ -331,9 +384,135 @@ export default function Sidebar() {
     </ListItemButton>
   );
 
+  const notificationsButton = (
+    <ListItemButton
+      onClick={() => setNotificationOpen((prev) => !prev)}
+      sx={{
+        mx: 1,
+        my: 0.25,
+        minHeight: 38,
+        borderRadius: 2,
+        color: "#475569",
+        "&:hover": {
+          background: "rgba(0,0,0,0.05)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 36, color: "#64748b" }}>
+        <EmailOutlined />
+      </ListItemIcon>
+
+      {open ? (
+        <>
+          <ListItemText
+            primary="Notification"
+            primaryTypographyProps={{
+              fontWeight: 700,
+              fontSize: "0.86rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
+            }}
+          />
+          {notificationOpen ? <ExpandLess /> : <ExpandMore />}
+        </>
+      ) : null}
+    </ListItemButton>
+  );
+
+  const mikrotikButton = (
+    <ListItemButton
+      onClick={() => setMikrotikOpen((prev) => !prev)}
+      sx={{
+        mx: 1,
+        my: 0.25,
+        minHeight: 38,
+        borderRadius: 2,
+        color: "#475569",
+        "&:hover": {
+          background: "rgba(0,0,0,0.05)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 36, color: "#64748b" }}>
+        <RouterOutlined />
+      </ListItemIcon>
+
+      {open ? (
+        <>
+          <ListItemText
+            primary="Mikrotik"
+            primaryTypographyProps={{
+              fontWeight: 700,
+              fontSize: "0.86rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
+            }}
+          />
+          {mikrotikOpen ? <ExpandLess /> : <ExpandMore />}
+        </>
+      ) : null}
+    </ListItemButton>
+  );
+
+  const transactionButton = (
+    <ListItemButton
+      onClick={() => setTransactionOpen((prev) => !prev)}
+      sx={{
+        mx: 1,
+        my: 0.25,
+        minHeight: 38,
+        borderRadius: 2,
+        color: "#475569",
+        "&:hover": {
+          background: "rgba(0,0,0,0.05)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 36, color: "#64748b" }}>
+        <FactCheckOutlined />
+      </ListItemIcon>
+
+      {open ? (
+        <>
+          <ListItemText
+            primary="Transaction"
+            primaryTypographyProps={{
+              fontWeight: 700,
+              fontSize: "0.86rem",
+              noWrap: true
+            }}
+            sx={{
+              minWidth: 0,
+              "& .MuiTypography-root": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }
+            }}
+          />
+          {transactionOpen ? <ExpandLess /> : <ExpandMore />}
+        </>
+      ) : null}
+    </ListItemButton>
+  );
+
   return (
     <motion.div
-      animate={{ width: open ? 230 : 70 }}
+      animate={{ width: open ? 202 : 64 }}
       transition={{ duration: 0.25 }}
       style={{
         height: "100vh",
@@ -350,14 +529,15 @@ export default function Sidebar() {
       {/* HEADER */}
       <Box
         sx={{
-          p: 2,
+          px: 1.2,
+          py: 1,
           display: "flex",
           alignItems: "center",
           justifyContent: open ? "space-between" : "center"
         }}
       >
         {open && (
-          <Box sx={{ fontWeight: "bold", fontSize: 16 }}>
+          <Box sx={{ fontWeight: 700, fontSize: 14.5, letterSpacing: 0.2 }}>
             ISP SYSTEM
           </Box>
         )}
@@ -397,6 +577,34 @@ export default function Sidebar() {
             );
           })}
 
+          {transactionMenu.length > 0 ? (
+            <>
+              {open ? (
+                transactionButton
+              ) : (
+                <Tooltip title="Transaction" placement="right">
+                  {transactionButton}
+                </Tooltip>
+              )}
+
+              <Collapse in={transactionOpen} timeout="auto" unmountOnExit>
+                {transactionMenu.map((item) => {
+                  const button = renderMenuButton(item);
+
+                  return open ? (
+                    <Box key={item.text} sx={{ pl: 1.5 }}>
+                      {button}
+                    </Box>
+                  ) : (
+                    <Tooltip title={item.text} placement="right" key={item.text}>
+                      {button}
+                    </Tooltip>
+                  );
+                })}
+              </Collapse>
+            </>
+          ) : null}
+
           {reportMenu.length > 0 ? (
             <>
               {open ? (
@@ -425,12 +633,68 @@ export default function Sidebar() {
             </>
           ) : null}
 
+          {mikrotikMenu.length > 0 ? (
+            <>
+              {open ? (
+                mikrotikButton
+              ) : (
+                <Tooltip title="Mikrotik" placement="right">
+                  {mikrotikButton}
+                </Tooltip>
+              )}
+
+              <Collapse in={mikrotikOpen} timeout="auto" unmountOnExit>
+                {mikrotikMenu.map((item) => {
+                  const button = renderMenuButton(item);
+
+                  return open ? (
+                    <Box key={item.text} sx={{ pl: 1.5 }}>
+                      {button}
+                    </Box>
+                  ) : (
+                    <Tooltip title={item.text} placement="right" key={item.text}>
+                      {button}
+                    </Tooltip>
+                  );
+                })}
+              </Collapse>
+            </>
+          ) : null}
+
+          {notificationMenu.length > 0 ? (
+            <>
+              {open ? (
+                notificationsButton
+              ) : (
+                <Tooltip title="Notification" placement="right">
+                  {notificationsButton}
+                </Tooltip>
+              )}
+
+              <Collapse in={notificationOpen} timeout="auto" unmountOnExit>
+                {notificationMenu.map((item) => {
+                  const button = renderMenuButton(item);
+
+                  return open ? (
+                    <Box key={item.text} sx={{ pl: 1.5 }}>
+                      {button}
+                    </Box>
+                  ) : (
+                    <Tooltip title={item.text} placement="right" key={item.text}>
+                      {button}
+                    </Tooltip>
+                  );
+                })}
+              </Collapse>
+            </>
+          ) : null}
+
           {serviceMenu.length > 0 ? (
             <>
               {open ? (
                 servicesButton
               ) : (
-                <Tooltip title="Services" placement="right">
+                <Tooltip title="System" placement="right">
                   {servicesButton}
                 </Tooltip>
               )}
@@ -466,15 +730,15 @@ export default function Sidebar() {
             gap: 1.5
           }}
         >
-          <Avatar sx={{ bgcolor: "#1d4ed8", width: 36, height: 36 }}>
+          <Avatar sx={{ bgcolor: "#1d4ed8", width: 34, height: 34, fontSize: 14 }}>
             {String(user?.name || user?.username || "U").charAt(0).toUpperCase()}
           </Avatar>
           {open ? (
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: 14 }} noWrap>
+              <Typography sx={{ fontWeight: 700, fontSize: 13 }} noWrap>
                 {user?.name || user?.username}
               </Typography>
-              <Typography color="text.secondary" sx={{ fontSize: 12 }} noWrap>
+              <Typography color="text.secondary" sx={{ fontSize: 11 }} noWrap>
                 {user?.type || "USER"}
               </Typography>
             </Box>

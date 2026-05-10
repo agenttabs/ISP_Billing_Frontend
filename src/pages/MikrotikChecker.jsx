@@ -79,6 +79,13 @@ const formatDateTime = (value) => {
   return date.toLocaleString("en-PH");
 };
 
+const formatAuthMode = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "PPPOE") return "pppoe";
+  if (normalized === "IPOE") return "ipoe";
+  return value || "-";
+};
+
 export default function MikrotikChecker() {
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
@@ -383,7 +390,7 @@ export default function MikrotikChecker() {
                               }}
                             />
                           </TableCell>
-                          <TableCell>{row.authMode || "-"}</TableCell>
+                          <TableCell>{formatAuthMode(row.authMode)}</TableCell>
                           <TableCell>{row.accountName || "-"}</TableCell>
                           <TableCell>{row.clientName || "-"}</TableCell>
                           <TableCell>{row.systemPlan || "-"}</TableCell>

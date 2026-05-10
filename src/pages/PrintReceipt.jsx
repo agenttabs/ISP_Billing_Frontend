@@ -23,11 +23,129 @@ const defaultForm = {
   ReceiptSubtitle: "DNS INTERNET",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "DNS PRINTER",
+  EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,
   ShowContactNumber: true,
   ShowReference: true,
   ShowCreatedBy: true
+};
+
+const openTestReceiptPrint = (config) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const receiptWindow = window.open("", "_blank", "width=420,height=900");
+
+  if (!receiptWindow) {
+    return;
+  }
+
+  const paymentLines = [
+    { method: "CASH", amount: 500, reference: "" },
+    { method: "GCASH", amount: 1000, reference: "8039947123436" }
+  ];
+
+  const paymentBreakdownHtml = paymentLines
+    .map(
+      (line) => `
+        <tr>
+          <td>${line.method}</td>
+          <td style="text-align:right">PHP ${Number(line.amount || 0).toLocaleString("en-PH", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}</td>
+        </tr>
+        ${
+          config.ShowReference && line.reference
+            ? `<tr><td colspan="2" style="font-size:11px;color:#475569">Ref: ${line.reference}</td></tr>`
+            : ""
+        }
+      `
+    )
+    .join("");
+
+  receiptWindow.document.write(`
+    <html>
+      <head>
+        <title>Test Receipt</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 12px;
+            color: #0f172a;
+            background: #ffffff;
+          }
+          .receipt {
+            width: 300px;
+            margin: 0 auto;
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            padding: 14px;
+          }
+          .center { text-align: center; }
+          .title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
+          .subtitle { font-size: 12px; color: #475569; margin-bottom: 12px; }
+          .meta, .section-note { font-size: 12px; color: #334155; line-height: 1.55; }
+          .line {
+            border-top: 1px dashed #cbd5e1;
+            margin: 10px 0;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+          }
+          td {
+            padding: 3px 0;
+            vertical-align: top;
+          }
+          .total {
+            font-weight: 700;
+            font-size: 14px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="center title">${config.CompanyName || "-"}</div>
+          <div class="center title" style="font-size:15px;">${config.ReceiptTitle || "-"}</div>
+          <div class="center subtitle">${config.ReceiptSubtitle || "-"}</div>
+
+          <div class="meta">Receipt No.: PR-TEST-0001</div>
+          <div class="meta">Invoice No.: SI-TEST-0001</div>
+          <div class="meta">Date: ${new Date().toLocaleString("en-PH")}</div>
+          <div class="meta">Client: Juan Dela Cruz</div>
+          <div class="meta">Account: test-account</div>
+          ${config.ShowContactNumber ? '<div class="meta">Contact: 09167700957</div>' : ""}
+          ${config.ShowSubscriptionCover ? '<div class="meta">Subscription: May 15, 2026 to June 14, 2026</div>' : ""}
+
+          <div class="line"></div>
+          <table>
+            <tbody>
+              ${paymentBreakdownHtml}
+              <tr>
+                <td class="total">Total Paid</td>
+                <td class="total" style="text-align:right">PHP 1,500.00</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="line"></div>
+
+          ${config.ShowCreatedBy ? '<div class="section-note">Received By: admin</div>' : ""}
+          <div class="section-note">${config.FooterNote || "-"}</div>
+        </div>
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  receiptWindow.document.close();
 };
 
 export default function PrintReceipt() {
@@ -73,6 +191,18 @@ export default function PrintReceipt() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTestPrint = () => {
+    setError("");
+    setSuccess("");
+
+    if (!form.EnablePrinting) {
+      setError("Printing is disabled. Turn on Enable Printing first.");
+      return;
+    }
+
+    openTestReceiptPrint(form);
   };
 
   return (
@@ -179,6 +309,21 @@ export default function PrintReceipt() {
                 <FormControlLabel
                   control={
                     <Switch
+                      checked={form.EnablePrinting}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          EnablePrinting: event.target.checked
+                        }))
+                      }
+                    />
+                  }
+                  label="Enable Printing"
+                />
+
+                <FormControlLabel
+                  control={
+                    <Switch
                       checked={form.UseDirectPrint}
                       onChange={(event) =>
                         setForm((prev) => ({
@@ -275,9 +420,21 @@ export default function PrintReceipt() {
                 <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
                   Footer: {form.FooterNote || "-"}
                 </Typography>
+                <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
+                  Printing: {form.EnablePrinting ? "Enabled" : "Disabled"}
+                </Typography>
               </Box>
 
-              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5 }}>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  startIcon={<PrintOutlinedIcon />}
+                  onClick={handleTestPrint}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  Test Print
+                </Button>
                 <Button
                   type="submit"
                   variant="contained"

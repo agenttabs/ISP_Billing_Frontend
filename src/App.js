@@ -17,8 +17,8 @@ import EmailNotification from "./pages/EmailNotification";
 import ExpenseInput from "./pages/ExpenseInput";
 import Login from "./pages/Login";
 import MikrotikChecker from "./pages/MikrotikChecker";
+import MikrotikConnection from "./pages/MikrotikConnection";
 import MikrotikDcBatch from "./pages/MikrotikDcBatch";
-import MikrotikDueDisconnectBatch from "./pages/MikrotikDueDisconnectBatch";
 import NapLocation from "./pages/NapLocation";
 import NetplanMaintenance from "./pages/NetplanMaintenance";
 import PrintReceipt from "./pages/PrintReceipt";
@@ -26,6 +26,7 @@ import ReportExpensesAndEarnings from "./pages/ReportExpensesAndEarnings";
 import ReportTransactions from "./pages/ReportTransactions";
 import RepairInformation from "./pages/RepairInformation";
 import SMSBatchPrograms from "./pages/SMSBatchPrograms";
+import SMSGateway from "./pages/SMSGateway";
 import SMSRecepients from "./pages/SMSRecepients";
 import SystemDiagnostics from "./pages/SystemDiagnostics";
 import SystemLogs from "./pages/SystemLogs";
@@ -90,17 +91,15 @@ function App() {
             <Route path="/reports/audit-logs" element={<SystemLogs />} />
             <Route path="/account-users" element={<UserAccounts />} />
             <Route path="/sms-recepients" element={<SMSRecepients />} />
+            <Route path="/sms-collection" element={<SMSGateway />} />
             <Route path="/sms-batch-programs" element={<SMSBatchPrograms />} />
             <Route path="/email-notification" element={<EmailNotification />} />
             <Route path="/netplans-maintenance" element={<NetplanMaintenance />} />
             <Route path="/print-receipt" element={<PrintReceipt />} />
             <Route path="/client-bypass" element={<ClientBypass />} />
+            <Route path="/mikrotik-connections" element={<MikrotikConnection />} />
             <Route path="/mikrotik-checker" element={<MikrotikChecker />} />
             <Route path="/mikrotik-dc-batch" element={<MikrotikDcBatch />} />
-            <Route
-              path="/mikrotik-due-disconnect-batch"
-              element={<MikrotikDueDisconnectBatch />}
-            />
             <Route path="/transaction-verification" element={<TransactionVerification />} />
             <Route path="/system-diagnostics" element={<SystemDiagnostics />} />
           </Route>
