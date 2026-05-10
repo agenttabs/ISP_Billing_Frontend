@@ -35,6 +35,7 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { useState, useEffect, useCallback } from "react";
+import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
@@ -45,7 +46,7 @@ import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import Tesseract from "tesseract.js";
 
-import API from "../api/api";
+import API, { SOCKET_BASE_URL } from "../api/api";
 import BillingStatementContent from "../components/BillingStatementContent";
 import PageHeader from "../layout/PageHeader";
 import { useClient } from "../context/client.context";
@@ -1120,8 +1121,26 @@ function ClientList() {
   }, []);
 
   useEffect(() => {
-    refreshDhcpLeaseComments();
-  }, []);
+    const socket = io(SOCKET_BASE_URL, {
+      transports: ["websocket", "polling"]
+    });
+
+    const handleClientsChanged = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      fetchClients();
+      refreshDhcpLeaseComments();
+    };
+
+    socket.on("clients:changed", handleClientsChanged);
+
+    return () => {
+      socket.off("clients:changed", handleClientsChanged);
+      socket.disconnect();
+    };
+  }, [fetchClients, refreshDhcpLeaseComments]);
 
   useEffect(() => {
     const refreshActiveClientView = () => {
