@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -53,11 +53,68 @@ const formatOptionalCurrency = (value) => {
   return amount !== null ? formatCurrency(amount) : "N/A";
 };
 
-const formatDateTime = (value) => {
-  if (!value) return "-";
+const buildSafeDateFromParts = (year, month, day, hours = 0, minutes = 0, seconds = 0) => {
+  const date = new Date(year, month - 1, day, hours, minutes, seconds);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
+const parseDisplayDateTime = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  const rawValue = String(value).trim();
+  if (!rawValue) return null;
+
+  const isoLikeMatch = rawValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (isoLikeMatch) {
+    const [, year, month, day, hours = '0', minutes = '0', seconds = '0'] = isoLikeMatch;
+    return buildSafeDateFromParts(
+      Number(year),
+      Number(month),
+      Number(day),
+      Number(hours),
+      Number(minutes),
+      Number(seconds)
+    );
+  }
+
+  const slashMatch = rawValue.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i
+  );
+  if (slashMatch) {
+    const [, month, day, year, rawHours = '0', minutes = '0', seconds = '0', meridiem = ''] = slashMatch;
+    let hours = Number(rawHours);
+    const normalizedMeridiem = String(meridiem || '').toUpperCase();
+
+    if (normalizedMeridiem === 'PM' && hours < 12) {
+      hours += 12;
+    }
+    if (normalizedMeridiem === 'AM' && hours === 12) {
+      hours = 0;
+    }
+
+    return buildSafeDateFromParts(
+      Number(year),
+      Number(month),
+      Number(day),
+      hours,
+      Number(minutes),
+      Number(seconds)
+    );
+  }
+
+  const parsed = new Date(rawValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDateTime = (value) => {
+  const date = parseDisplayDateTime(value);
+  if (!date) return "-";
 
   return date.toLocaleString("en-PH", {
     year: "numeric",
@@ -877,3 +934,4 @@ export default function TransactionVerification() {
     </Box>
   );
 }
+

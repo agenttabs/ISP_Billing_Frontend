@@ -169,7 +169,7 @@ export default function Billing() {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("DNS INTERNET", 18, 14);
+    doc.text("DNS NETWORKS", 18, 14);
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(statementTitle, 18, 22);
@@ -254,7 +254,7 @@ export default function Billing() {
     const latestPaymentLines = latestPayment
       ? [
           `Date: ${formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}`,
-          `${latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}`,
+          `Receipt: ${latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}`,
           `Amount: ${formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}`
         ]
       : ["No payment history found for this account yet."];
@@ -368,7 +368,7 @@ export default function Billing() {
             >
               <Box>
                 <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>
-                  DNS INTERNET
+                  DNS NETWORKS
                 </Typography>
                 <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1, mt: 0.75 }}>
                   {statementMonth}
@@ -510,7 +510,7 @@ export default function Billing() {
               {latestPayment ? (
                 <Stack spacing={1.1}>
                   <Typography><strong>Date:</strong> {formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}</Typography>
-                  <Typography>{latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}</Typography>
+                  <Typography><strong>Receipt:</strong> {latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}</Typography>
                   <Typography><strong>Amount:</strong> {formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}</Typography>
                 </Stack>
               ) : (

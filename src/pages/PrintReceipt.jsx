@@ -20,7 +20,7 @@ const defaultForm = {
   Name: "Default Thermal Receipt",
   CompanyName: "DNS NETWORKS",
   ReceiptTitle: "Official Payment Receipt",
-  ReceiptSubtitle: "DNS INTERNET",
+  ReceiptSubtitle: "DNS NETWORKS",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "DNS PRINTER",
   EnablePrinting: true,
