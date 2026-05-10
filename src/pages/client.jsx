@@ -34,7 +34,7 @@ import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
@@ -1081,7 +1081,7 @@ function ClientList() {
     : "";
   const repairDetailsDisplayValue = repairSmsPreview || repairDialog.repairText;
 
-  const refreshDhcpLeaseComments = async () => {
+  const refreshDhcpLeaseComments = useCallback(async () => {
     try {
       const res = await API.get("/dhcp-leases-all");
       setDhcpLeaseComments(res.data || []);
@@ -1089,7 +1089,7 @@ function ClientList() {
       console.error("DHCP LEASE COMMENT FETCH ERROR:", err);
       setDhcpLeaseComments([]);
     }
-  };
+  }, []);
 
   const loadReceiptPrintConfig = async () => {
     try {
@@ -1124,13 +1124,31 @@ function ClientList() {
   }, []);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
+    const refreshActiveClientView = () => {
+      if (document.hidden) {
+        return;
+      }
+
       fetchClients();
       refreshDhcpLeaseComments();
-    }, 15000);
+    };
 
-    return () => clearInterval(intervalId);
-  }, [fetchClients]);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshActiveClientView();
+      }
+    };
+
+    window.addEventListener("focus", refreshActiveClientView);
+    window.addEventListener("pageshow", refreshActiveClientView);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshActiveClientView);
+      window.removeEventListener("pageshow", refreshActiveClientView);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchClients, refreshDhcpLeaseComments]);
 
   useEffect(() => {
       const selectedClientOverdueDays = getClientOverdueDays(selectedClient);
