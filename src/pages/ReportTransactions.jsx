@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -71,6 +71,43 @@ export default function ReportTransactions() {
           ),
     [filteredRows, shouldWaitForAdminDateRange]
   );
+
+  const paymentTypeCounts = useMemo(() => {
+    if (shouldWaitForAdminDateRange) {
+      return {
+        CASH: 0,
+        GCASH: 0,
+        PAYMAYA: 0,
+        BANK: 0
+      };
+    }
+
+    return filteredRows.reduce(
+      (counts, row) => {
+        const method = String(row.MOP || row.Type || "")
+          .trim()
+          .toUpperCase();
+
+        if (method === "CASH") {
+          counts.CASH += 1;
+        } else if (method === "GCASH") {
+          counts.GCASH += 1;
+        } else if (method === "PAYMAYA") {
+          counts.PAYMAYA += 1;
+        } else if (method === "BANK") {
+          counts.BANK += 1;
+        }
+
+        return counts;
+      },
+      {
+        CASH: 0,
+        GCASH: 0,
+        PAYMAYA: 0,
+        BANK: 0
+      }
+    );
+  }, [filteredRows, shouldWaitForAdminDateRange]);
 
   const displayedRecordCount = shouldWaitForAdminDateRange
     ? 0
@@ -181,11 +218,25 @@ export default function ReportTransactions() {
                 Records: {displayedRecordCount}
               </Typography>
             </Box>
-            <Box sx={{ ml: "auto", alignSelf: "center" }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                Total: {formatMoney(totalCollection)}
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "flex-start", md: "center" }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                Cash: {paymentTypeCounts.CASH}
               </Typography>
-            </Box>
+              <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                GCash: {paymentTypeCounts.GCASH}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                PayMaya: {paymentTypeCounts.PAYMAYA}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                Bank: {paymentTypeCounts.BANK}
+              </Typography>
+              <Box sx={{ ml: { md: 1 }, alignSelf: "center" }}>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Total: {formatMoney(totalCollection)}
+                </Typography>
+              </Box>
+            </Stack>
           </Stack>
         </CardContent>
       </Card>
@@ -249,3 +300,4 @@ export default function ReportTransactions() {
     </Box>
   );
 }
+

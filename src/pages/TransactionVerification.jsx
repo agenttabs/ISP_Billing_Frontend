@@ -842,12 +842,24 @@ export default function TransactionVerification() {
           }}
         >
           <Box sx={{ px: 2.5, py: 2, borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
-            <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
-              Pending Print Records
-            </Typography>
-            <Typography sx={{ color: "#64748b", fontSize: 14, mt: 0.5 }}>
-              Manual verification is available with the checkbox. Rows matched from the PDF are highlighted in green, while amount mismatches are highlighted in orange with the PDF amount comment.
-            </Typography>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={1}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+            >
+              <Box>
+                <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                  Pending Print Records
+                </Typography>
+                <Typography sx={{ color: "#64748b", fontSize: 14, mt: 0.5 }}>
+                  Manual verification is available with the checkbox. Rows matched from the PDF are highlighted in green, while amount mismatches are highlighted in orange with the PDF amount comment.
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap" }}>
+                Display Count: {records.length}
+              </Typography>
+            </Stack>
           </Box>
 
           <Table size="small">
@@ -934,4 +946,5 @@ export default function TransactionVerification() {
     </Box>
   );
 }
+
 
