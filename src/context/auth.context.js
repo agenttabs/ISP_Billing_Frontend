@@ -4,6 +4,8 @@ import API from "../api/api";
 
 const AuthContext = createContext();
 const initialToken = localStorage.getItem("token");
+const initialUserRaw = localStorage.getItem("user");
+const initialUser = initialUserRaw ? JSON.parse(initialUserRaw) : null;
 
 if (initialToken) {
   axios.defaults.headers.common.Authorization = `Bearer ${initialToken}`;
@@ -11,10 +13,7 @@ if (initialToken) {
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(initialToken || null);
-  const [user, setUser] = useState(() => {
-    const rawUser = localStorage.getItem("user");
-    return rawUser ? JSON.parse(rawUser) : null;
-  });
+  const [user, setUser] = useState(initialUser);
   const [loading, setLoading] = useState(false);
 
   const login = async (username, password) => {
@@ -39,12 +38,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = (redirectToLogin = false) => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    delete axios.defaults.headers.common.Authorization;
     setToken(null);
     setUser(null);
+
+    if (redirectToLogin && window.location.pathname !== "/login") {
+      window.location.replace("/login");
+    }
   };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      setLoading(true);
+      const { data } = await API.post("/auth/change-password", {
+        currentPassword,
+        newPassword
+      });
+
+      return { success: true, message: data?.message || "Password changed successfully." };
+    } catch (err) {
+      const message = err.response?.data?.error || "Failed to change password.";
+      console.error("Change password error:", err);
+      return { success: false, error: message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     if (token) {
@@ -54,6 +77,33 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token]);
 
+  useEffect(() => {
+    if ((token && !user) || (!token && user)) {
+      logout(true);
+    }
+  }, [token, user]);
+
+  useEffect(() => {
+    const interceptorId = API.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const status = error?.response?.status;
+        const requestUrl = String(error?.config?.url || "");
+        const isLoginRequest = requestUrl.includes("/auth/login");
+
+        if ((status === 401 || status === 403) && !isLoginRequest) {
+          logout(true);
+        }
+
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      API.interceptors.response.eject(interceptorId);
+    };
+  }, [token, user]);
+
   const value = useMemo(
     () => ({
       token,
@@ -62,6 +112,7 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated: Boolean(token),
       login,
       logout,
+      changePassword,
       hasRole: (...roles) =>
         roles
           .map((role) => String(role).toUpperCase())

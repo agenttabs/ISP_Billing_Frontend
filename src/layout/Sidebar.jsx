@@ -11,7 +11,14 @@ import {
   Box,
   Tooltip,
   IconButton,
-  Typography
+  Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  Button
 } from "@mui/material";
 
 import {
@@ -33,6 +40,7 @@ import {
   RouterOutlined,
   SettingsEthernetOutlined,
   ShieldOutlined,
+  LockResetOutlined,
   SettingsSuggestOutlined,
   FmdGoodOutlined,
   HistoryOutlined,
@@ -49,13 +57,21 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { clients } = useClient();
-  const { user, logout } = useAuth();
+  const { user, logout, changePassword, loading: authLoading } = useAuth();
   const [open, setOpen] = useState(true);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [mikrotikOpen, setMikrotikOpen] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [changePasswordError, setChangePasswordError] = useState("");
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState("");
   const unpaidCount = clients.filter(
     (c) => (c.PaymentStatus || "").toUpperCase() !== "PAID"
   ).length;
@@ -201,6 +217,58 @@ export default function Sidebar() {
     }
   ].filter((item) => item.roles.includes(userType));
 
+  const resetChangePasswordDialog = () => {
+    setChangePasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: ""
+    });
+    setChangePasswordError("");
+    setChangePasswordSuccess("");
+  };
+
+  const handleOpenChangePassword = () => {
+    resetChangePasswordDialog();
+    setChangePasswordOpen(true);
+  };
+
+  const handleCloseChangePassword = () => {
+    setChangePasswordOpen(false);
+    resetChangePasswordDialog();
+  };
+
+  const handleChangePasswordSubmit = async () => {
+    setChangePasswordError("");
+    setChangePasswordSuccess("");
+
+    if (!changePasswordForm.currentPassword || !changePasswordForm.newPassword || !changePasswordForm.confirmPassword) {
+      setChangePasswordError("Current password, new password, and confirm password are required.");
+      return;
+    }
+
+    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
+      setChangePasswordError("New password and confirm password do not match.");
+      return;
+    }
+
+    const result = await changePassword(
+      changePasswordForm.currentPassword,
+      changePasswordForm.newPassword
+    );
+
+    if (!result.success) {
+      setChangePasswordError(result.error || "Failed to change password.");
+      return;
+    }
+
+    setChangePasswordSuccess(result.message || "Password changed successfully.");
+    setChangePasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: ""
+    });
+  };
+
   const handleLogout = () => {
     logout();
     navigate("/login", { replace: true });
@@ -278,6 +346,27 @@ export default function Sidebar() {
       </ListItemButton>
     );
   };
+
+  const changePasswordButton = (
+    <ListItemButton
+      onClick={handleOpenChangePassword}
+      sx={{
+        mx: 1,
+        mt: 1,
+        minHeight: 40,
+        borderRadius: 2,
+        color: "#1f2937",
+        "&:hover": {
+          background: "rgba(99,102,241,0.08)"
+        }
+      }}
+    >
+      <ListItemIcon sx={{ minWidth: 36, color: "#6366f1" }}>
+        <LockResetOutlined />
+      </ListItemIcon>
+      {open && <ListItemText primary="Change password" primaryTypographyProps={{ fontSize: "0.88rem" }} />}
+    </ListItemButton>
+  );
 
   const logoutButton = (
     <ListItemButton
@@ -744,8 +833,49 @@ export default function Sidebar() {
             </Box>
           ) : null}
         </Box>
+        {open ? changePasswordButton : <Tooltip title="Change password">{changePasswordButton}</Tooltip>}
         {open ? logoutButton : <Tooltip title="Sign out">{logoutButton}</Tooltip>}
       </Box>
+
+      <Dialog open={changePasswordOpen} onClose={handleCloseChangePassword} fullWidth maxWidth="xs">
+        <DialogTitle>Change Password</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "grid", gap: 1.5, pt: 1 }}>
+            {changePasswordError ? <Alert severity="error">{changePasswordError}</Alert> : null}
+            {changePasswordSuccess ? <Alert severity="success">{changePasswordSuccess}</Alert> : null}
+            <TextField
+              label="Current Password"
+              type="password"
+              value={changePasswordForm.currentPassword}
+              onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="New Password"
+              type="password"
+              value={changePasswordForm.newPassword}
+              onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+            <TextField
+              label="Confirm Password"
+              type="password"
+              value={changePasswordForm.confirmPassword}
+              onChange={(e) => setChangePasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+              fullWidth
+              size="small"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseChangePassword}>Cancel</Button>
+          <Button onClick={handleChangePasswordSubmit} variant="contained" disabled={authLoading}>
+            Update Password
+          </Button>
+        </DialogActions>
+      </Dialog>
     </motion.div>
   );
 }

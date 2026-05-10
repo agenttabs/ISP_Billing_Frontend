@@ -34,7 +34,7 @@ import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -1027,6 +1027,7 @@ function ClientList() {
     ReconnectMacAddress: ""
   });
   const [paymentEntries, setPaymentEntries] = useState([createPaymentEntry()]);
+  const paymentReceiptRequestKeyRef = useRef("");
   const [receiptPreview, setReceiptPreview] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState("");
@@ -1252,8 +1253,20 @@ function ClientList() {
 
   useEffect(() => {
     if (!openPaymentModal || !paymentForm.PaymentDate) {
+      paymentReceiptRequestKeyRef.current = "";
       return;
     }
+
+    const requestKey = [
+      selectedClient?._id || selectedClient?.id || selectedClient?.AccountNumber || "payment",
+      paymentForm.PaymentDate
+    ].join("::");
+
+    if (paymentReceiptRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    paymentReceiptRequestKeyRef.current = requestKey;
 
     let active = true;
 
@@ -1284,6 +1297,7 @@ function ClientList() {
           "PAYMENT DATE RECEIPT REFRESH ERROR:",
           err.response?.data || err.message
         );
+        paymentReceiptRequestKeyRef.current = "";
         setOpenPaymentModal(false);
         setOpenPaymentEntriesModal(false);
         resetPaymentForm();
@@ -1304,7 +1318,7 @@ function ClientList() {
     return () => {
       active = false;
     };
-  }, [openPaymentModal, paymentForm.PaymentDate]);
+  }, [openPaymentModal, paymentForm.PaymentDate, selectedClient]);
 
   const emailValue = (newClient.Email || "").trim();
   const normalizedEmail = emailValue.toLowerCase();
@@ -1605,29 +1619,6 @@ function ClientList() {
       })
     ]);
     setOpenPaymentModal(true);
-    setPaymentReceiptLoading(true);
-
-    try {
-      const nextReceiptNumber = await fetchNextPaymentReceiptNumber(paymentDate);
-
-      setPaymentForm((prev) => ({
-        ...prev,
-        ReferenceNumber: nextReceiptNumber,
-        Invoice: toSalesInvoiceNumber(nextReceiptNumber)
-      }));
-    } catch (err) {
-      console.error("PAYMENT RECEIPT NUMBER ERROR:", err.response?.data || err.message);
-      setOpenPaymentModal(false);
-      setOpenPaymentEntriesModal(false);
-      resetPaymentForm();
-      showMessage(
-        "Receipt Number Error",
-        "Failed to generate the next PR receipt number.",
-        "error"
-      );
-    } finally {
-      setPaymentReceiptLoading(false);
-    }
   };
 
   const handleOpenPaymentModal = (client) => {

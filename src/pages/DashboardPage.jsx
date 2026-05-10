@@ -95,7 +95,12 @@ const statCards = [
     title: "GCash Payment Today",
     icon: <AccountBalanceWalletOutlinedIcon />,
     color: "#0891b2",
-    format: "currency"
+    format: "currency",
+    clickable: true,
+    endpoint: "/dashboard/collections/gcash",
+    dialogTitle: "GCash Payment Today",
+    emptyMessage: "No GCash payment found for today.",
+    listType: "collection"
   },
   {
     group: "Collection Today",
@@ -104,7 +109,12 @@ const statCards = [
     title: "PayMaya Payment Today",
     icon: <PaymentsOutlinedIcon />,
     color: "#16a34a",
-    format: "currency"
+    format: "currency",
+    clickable: true,
+    endpoint: "/dashboard/collections/paymaya",
+    dialogTitle: "PayMaya Payment Today",
+    emptyMessage: "No PayMaya payment found for today.",
+    listType: "collection"
   },
   {
     group: "Collection Today",
@@ -113,7 +123,12 @@ const statCards = [
     title: "Bank Payment Today",
     icon: <AccountBalanceOutlinedIcon />,
     color: "#4338ca",
-    format: "currency"
+    format: "currency",
+    clickable: true,
+    endpoint: "/dashboard/collections/bank",
+    dialogTitle: "Bank Payment Today",
+    emptyMessage: "No bank payment found for today.",
+    listType: "collection"
   },
   {
     group: "Collection Today",
@@ -122,7 +137,12 @@ const statCards = [
     title: "Cash Payment Today",
     icon: <PointOfSaleOutlinedIcon />,
     color: "#ca8a04",
-    format: "currency"
+    format: "currency",
+    clickable: true,
+    endpoint: "/dashboard/collections/cash",
+    dialogTitle: "Cash Payment Today",
+    emptyMessage: "No cash payment found for today.",
+    listType: "collection"
   }
 ];
 
@@ -174,6 +194,7 @@ export default function DashboardPage() {
   const [listRows, setListRows] = useState([]);
   const [listError, setListError] = useState("");
   const [listDialogTitle, setListDialogTitle] = useState("");
+  const [listDialogType, setListDialogType] = useState("client");
   const [listEmptyMessage, setListEmptyMessage] = useState("");
 
   useEffect(() => {
@@ -196,6 +217,7 @@ export default function DashboardPage() {
   const openListDialog = async (card) => {
     try {
       setListDialogTitle(card.dialogTitle || card.title || "Client List");
+      setListDialogType(card.listType || "client");
       setListEmptyMessage(card.emptyMessage || "No client found.");
       setListDialogOpen(true);
       setListLoading(true);
@@ -330,46 +352,77 @@ export default function DashboardPage() {
             <Alert severity="info">{listEmptyMessage || "No client found."}</Alert>
           ) : (
             <Box sx={{ overflowX: "auto" }}>
-              <Table size="small" sx={{ minWidth: 980 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Account Name</TableCell>
-                    <TableCell>Client Name</TableCell>
-                    <TableCell>Auth</TableCell>
-                    <TableCell>MikroTik Plan</TableCell>
-                    <TableCell>Due Date</TableCell>
-                    <TableCell>Disconnect Date</TableCell>
-                    <TableCell>Days Past Due</TableCell>
-                    <TableCell>Amount Due</TableCell>
-                    <TableCell>Contact</TableCell>
-                    <TableCell>Address</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {listRows.map((row) => (
-                    <TableRow key={row.clientId || `${row.accountName}-${row.disconnectDate}`}>
-                      <TableCell>{row.accountName || "-"}</TableCell>
-                      <TableCell>{row.clientName || "-"}</TableCell>
-                      <TableCell>{row.authMode || "-"}</TableCell>
-                      <TableCell>{row.mikrotikPlan || "-"}</TableCell>
-                      <TableCell>{row.dueDate || "-"}</TableCell>
-                      <TableCell>{row.disconnectDate || "-"}</TableCell>
-                      <TableCell>{Number(row.daysPastDue || 0)}</TableCell>
-                      <TableCell>{formatCurrency(row.amountDue)}</TableCell>
-                      <TableCell>{row.contactNumber || "-"}</TableCell>
-                      <TableCell
-                        sx={{
-                          maxWidth: 260,
-                          whiteSpace: "normal",
-                          wordBreak: "break-word"
-                        }}
-                      >
-                        {row.address || "-"}
-                      </TableCell>
+              {listDialogType === "collection" ? (
+                <Table size="small" sx={{ minWidth: 920 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Transaction Date</TableCell>
+                      <TableCell>Account Name</TableCell>
+                      <TableCell>Client Name</TableCell>
+                      <TableCell>Method</TableCell>
+                      <TableCell>Reference</TableCell>
+                      <TableCell>Receipt No.</TableCell>
+                      <TableCell>Amount</TableCell>
+                      <TableCell>Created By</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {listRows.map((row) => (
+                      <TableRow key={row.rowId || row.receiptNumber || row.reference}>
+                        <TableCell>{row.transactionDate ? new Date(row.transactionDate).toLocaleString("en-PH") : "-"}</TableCell>
+                        <TableCell>{row.accountName || "-"}</TableCell>
+                        <TableCell>{row.clientName || "-"}</TableCell>
+                        <TableCell>{row.method || "-"}</TableCell>
+                        <TableCell>{row.reference || "-"}</TableCell>
+                        <TableCell>{row.receiptNumber || "-"}</TableCell>
+                        <TableCell>{formatCurrency(row.amount)}</TableCell>
+                        <TableCell>{row.createdBy || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <Table size="small" sx={{ minWidth: 980 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Account Name</TableCell>
+                      <TableCell>Client Name</TableCell>
+                      <TableCell>Auth</TableCell>
+                      <TableCell>MikroTik Plan</TableCell>
+                      <TableCell>Due Date</TableCell>
+                      <TableCell>Disconnect Date</TableCell>
+                      <TableCell>Days Past Due</TableCell>
+                      <TableCell>Amount Due</TableCell>
+                      <TableCell>Contact</TableCell>
+                      <TableCell>Address</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {listRows.map((row) => (
+                      <TableRow key={row.clientId || `${row.accountName}-${row.disconnectDate}`}>
+                        <TableCell>{row.accountName || "-"}</TableCell>
+                        <TableCell>{row.clientName || "-"}</TableCell>
+                        <TableCell>{row.authMode || "-"}</TableCell>
+                        <TableCell>{row.mikrotikPlan || "-"}</TableCell>
+                        <TableCell>{row.dueDate || "-"}</TableCell>
+                        <TableCell>{row.disconnectDate || "-"}</TableCell>
+                        <TableCell>{Number(row.daysPastDue || 0)}</TableCell>
+                        <TableCell>{formatCurrency(row.amountDue)}</TableCell>
+                        <TableCell>{row.contactNumber || "-"}</TableCell>
+                        <TableCell
+                          sx={{
+                            maxWidth: 260,
+                            whiteSpace: "normal",
+                            wordBreak: "break-word"
+                          }}
+                        >
+                          {row.address || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </Box>
           )}
         </DialogContent>
