@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
         const requestUrl = String(error?.config?.url || "");
         const isLoginRequest = requestUrl.includes("/auth/login");
 
-        if ((status === 401 || status === 403) && !isLoginRequest) {
+        if (status === 401 && !isLoginRequest) {
           logout(true);
         }
 

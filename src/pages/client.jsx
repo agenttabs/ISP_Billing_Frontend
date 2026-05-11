@@ -978,7 +978,7 @@ const getStatusChipStyles = (status) => {
 
 function ClientList() {
   const navigate = useNavigate();
-  const { clients, fetchClients, addClient, loading } = useClient();
+  const { clients, clientMeta, fetchClients, addClient, loading } = useClient();
 
   const currentUser = JSON.parse(localStorage.getItem("user") || "null");
   const currentUserType = String(
@@ -990,6 +990,7 @@ function ClientList() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ACTIVE");
 
   const [menu, setMenu] = useState(null);
@@ -1072,6 +1073,27 @@ function ClientList() {
     value: null,
     row: null
   });
+  const loadClients = useCallback(() => {
+    return fetchClients({
+      status: statusFilter,
+      search: debouncedSearch,
+      page: page + 1,
+      limit: rowsPerPage
+    });
+  }, [fetchClients, statusFilter, debouncedSearch, page, rowsPerPage]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [statusFilter, debouncedSearch]);
+
   const selectedRepairTechnician = technicians.find(
     (user) => String(user.ID || "") === String(repairDialog.technicianId)
   );
@@ -1114,8 +1136,8 @@ function ClientList() {
   };
 
   useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
+    loadClients();
+  }, [loadClients]);
 
   useEffect(() => {
     API
@@ -1138,7 +1160,7 @@ function ClientList() {
         return;
       }
 
-      fetchClients();
+      loadClients();
       refreshDhcpLeaseComments();
     };
 
@@ -1148,7 +1170,7 @@ function ClientList() {
       socket.off("clients:changed", handleClientsChanged);
       socket.disconnect();
     };
-  }, [fetchClients, refreshDhcpLeaseComments]);
+  }, [loadClients, refreshDhcpLeaseComments]);
 
   useEffect(() => {
     const refreshActiveClientView = () => {
@@ -1156,7 +1178,7 @@ function ClientList() {
         return;
       }
 
-      fetchClients();
+      loadClients();
       refreshDhcpLeaseComments();
     };
 
@@ -1175,7 +1197,7 @@ function ClientList() {
       window.removeEventListener("pageshow", refreshActiveClientView);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchClients, refreshDhcpLeaseComments]);
+  }, [loadClients, refreshDhcpLeaseComments]);
 
   useEffect(() => {
       const selectedClientOverdueDays = getClientOverdueDays(selectedClient);
@@ -1462,42 +1484,8 @@ function ClientList() {
     Math.round((mikrotikStatusTxBytes / mikrotikTrafficPeak) * 100)
   )}%`;
 
-  const activeCount = clients.filter((c) => !isDisconnectedPlan(c)).length;
-  const disconnectedCount = clients.filter((c) => isDisconnectedPlan(c)).length;
-
-  const filtered = clients.filter((c) => {
-    const s = search.toLowerCase();
-    const isDisconnected = isDisconnectedPlan(c);
-    const isActive = !isDisconnected;
-    const matchesStatus =
-      statusFilter === "ACTIVE" ? isActive : isDisconnected;
-
-    const formattedDate = c.DueDate
-      ? new Date(c.DueDate)
-          .toLocaleDateString("en-PH", {
-            year: "numeric",
-            month: "short",
-            day: "numeric"
-          })
-          .toLowerCase()
-      : "";
-
-    return (
-      matchesStatus &&
-      (
-        (c.ClientName || "").toLowerCase().includes(s) ||
-        (c.AccountName || "").toLowerCase().includes(s) ||
-        (c.Email || "").toLowerCase().includes(s) ||
-        formattedDate.includes(s) ||
-        (c.DueDate || "").toLowerCase().includes(s)
-      )
-    );
-  });
-
-  const paginated = filtered.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
+  const activeCount = Number(clientMeta?.activeCount || 0);
+  const disconnectedCount = Number(clientMeta?.disconnectedCount || 0);
 
   const handleRightClick = (event, client) => {
     event.preventDefault();
@@ -1823,7 +1811,7 @@ function ClientList() {
           : prev
       );
 
-      await Promise.allSettled([fetchClients(), refreshDhcpLeaseComments()]);
+      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
       handleCloseAdjustDueDateDialog();
       handleClosePaymentHistoryModal();
       showMessage(
@@ -2472,7 +2460,7 @@ function ClientList() {
 
     try {
       await addClient(data);
-      await Promise.allSettled([fetchClients(), refreshDhcpLeaseComments()]);
+      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
       handleCloseModal();
       setNewClient(getDefaultNewClientForm());
     } catch (err) {
@@ -2539,7 +2527,7 @@ function ClientList() {
         payload
       );
 
-      await Promise.allSettled([fetchClients(), refreshDhcpLeaseComments()]);
+      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
       handleCloseModal();
       setEditMode(false);
       setNewClient(getDefaultNewClientForm());
@@ -2594,7 +2582,7 @@ function ClientList() {
         payload
       );
 
-      await Promise.allSettled([fetchClients(), refreshDhcpLeaseComments()]);
+      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
       handleCloseModal();
       setEditMode(false);
       setNewClient(getDefaultNewClientForm());
@@ -3018,9 +3006,9 @@ function ClientList() {
           paymentReceipt: paymentReceiptNumber,
           salesInvoice: salesInvoiceNumber
         });
-      } catch (documentError) {
-        if (documentError.response?.status === 409) {
-          showMessage(
+        } catch (documentError) {
+          if (documentError.response?.status === 409) {
+            showMessage(
             "Duplicate Payment Reference",
             documentError.response?.data?.error ||
               "Payment receipt or sales invoice already exists.",
@@ -3039,41 +3027,41 @@ function ClientList() {
           return;
         }
 
-        throw documentError;
-      }
+          throw documentError;
+        }
 
-      try {
-        await API.post("/payments/validate-references", {
-          entries: normalizedPaymentEntries
-            .filter((entry) => entry.method !== "CASH")
-            .map((entry) => ({
-            method: entry.method,
-            amount: entry.amount,
-            reference: entry.reference,
-            receiptAmount: entry.receiptAmount || entry.amount
-          }))
-      });
-    } catch (validationError) {
-      const refs = Array.isArray(validationError.response?.data?.refs)
-        ? validationError.response.data.refs
-        : [];
-      const exceededRef = refs.find((item) => item.exceeds);
-      const usedByAccounts = exceededRef?.usedByAccounts?.length
-        ? ` Already used by: ${exceededRef.usedByAccounts.join(", ")}.`
-        : "";
+        try {
+          await API.post("/payments/validate-references", {
+            entries: normalizedPaymentEntries
+              .filter((entry) => entry.method !== "CASH")
+              .map((entry) => ({
+                method: entry.method,
+                amount: entry.amount,
+                reference: entry.reference,
+                receiptAmount: entry.receiptAmount || entry.amount
+              }))
+          });
+        } catch (validationError) {
+          const refs = Array.isArray(validationError.response?.data?.refs)
+            ? validationError.response.data.refs
+            : [];
+          const exceededRef = refs.find((item) => item.exceeds);
+          const usedByAccounts = exceededRef?.usedByAccounts?.length
+            ? ` Already used by: ${exceededRef.usedByAccounts.join(", ")}.`
+            : "";
 
-      showMessage(
-        "Duplicate Reference Error",
-        `${validationError.response?.data?.error || "One or more non-cash references already exceed the allowed receipt amount."}${usedByAccounts}`,
-        "error"
-      );
-      return;
-    }
+          showMessage(
+            "Duplicate Reference Error",
+            `${validationError.response?.data?.error || "One or more non-cash references already exceed the allowed receipt amount."}${usedByAccounts}`,
+            "error"
+          );
+          return;
+        }
 
-    if (paymentRequiresReconnectFlow && !paymentSelectedAuthMode) {
-      showMessage("Reconnect Type Required", "Please select whether this client will reconnect as PPPOE or IPOE.", "warning");
-      return;
-    }
+        if (paymentRequiresReconnectFlow && !paymentSelectedAuthMode) {
+          showMessage("Reconnect Type Required", "Please select whether this client will reconnect as PPPOE or IPOE.", "warning");
+          return;
+        }
 
     if (paymentRequiresReconnectFlow && !reconnectPlan) {
       showMessage("Reconnect Plan Required", "Please select the new plan for this client before receiving payment.", "warning");
@@ -3244,7 +3232,7 @@ function ClientList() {
         }
       );
 
-      await Promise.allSettled([fetchClients(), refreshDhcpLeaseComments()]);
+      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
       const receiptPayload = {
         clientName: selectedClient.ClientName || "",
         accountName: selectedClient.AccountName || "",
@@ -3358,7 +3346,10 @@ function ClientList() {
           label="Search"
           fullWidth
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
           sx={{
             "& .MuiOutlinedInput-root": {
               borderRadius: 2,
@@ -3381,7 +3372,10 @@ function ClientList() {
       >
         <Tabs
           value={statusFilter}
-          onChange={(_, value) => setStatusFilter(value)}
+            onChange={(_, value) => {
+              setStatusFilter(value);
+              setPage(0);
+            }}
           textColor="primary"
           indicatorColor="primary"
           sx={{
@@ -3478,7 +3472,7 @@ function ClientList() {
           </TableHead>
 
           <TableBody>
-            {paginated.map((c) => {
+            {clients.map((c) => {
               const displayedPaymentStatus = getDisplayedPaymentStatus(c);
               const isPaid = displayedPaymentStatus === "PAID";
               const accountNameKey = String(c.AccountName || "").trim().toUpperCase();
@@ -3671,13 +3665,14 @@ function ClientList() {
 
       <TablePagination
         component="div"
-        count={filtered.length}
-        page={page}
-        onPageChange={(e, newPage) => setPage(newPage)}
-        rowsPerPage={rowsPerPage}
-        onRowsPerPageChange={(e) =>
-          setRowsPerPage(parseInt(e.target.value, 10))
-        }
+          count={Number(clientMeta?.total || 0)}
+          page={page}
+          onPageChange={(e, newPage) => setPage(newPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
       />
 
       <Menu
@@ -4433,10 +4428,10 @@ function ClientList() {
                     )}
                   </Paper>
 
-                  <Paper elevation={0} sx={summaryCardSx}>
-                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                      Payment Reference
-                    </Typography>
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        Payment Reference
+                      </Typography>
                     <TextField
                       name="ReferenceNumber"
                       value={paymentForm.ReferenceNumber}
@@ -4453,9 +4448,18 @@ function ClientList() {
                           fontWeight: 700,
                           color: "#0f172a"
                         }
-                      }}
-                    />
-                  </Paper>
+                        }}
+                      />
+                    </Paper>
+
+                    <Paper elevation={0} sx={summaryCardSx}>
+                        <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                          SubTotal
+                        </Typography>
+                      <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
+                        PHP {planAmount}
+                      </Typography>
+                    </Paper>
 
                     <Paper elevation={0} sx={summaryCardSx}>
                       <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
@@ -4480,17 +4484,8 @@ function ClientList() {
                         {nextDueDateDisplay}
                       </Typography>
                     </Paper>
-
-                    <Paper elevation={0} sx={summaryCardSx}>
-                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                        SubTotal
-                      </Typography>
-                    <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
-                      PHP {planAmount}
-                    </Typography>
-                  </Paper>
-                </Box>
-              </Paper>
+                  </Box>
+                </Paper>
 
               <Paper elevation={0} sx={formSectionSx}>
                 <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
