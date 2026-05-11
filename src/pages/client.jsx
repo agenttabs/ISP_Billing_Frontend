@@ -3042,6 +3042,10 @@ function ClientList() {
               }))
           });
         } catch (validationError) {
+          if (validationError.response?.status !== 409) {
+            throw validationError;
+          }
+
           const refs = Array.isArray(validationError.response?.data?.refs)
             ? validationError.response.data.refs
             : [];

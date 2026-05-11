@@ -262,18 +262,19 @@ export default function ReportTransactions() {
                     <TableCell>Invoice</TableCell>
                     <TableCell>Total Amount</TableCell>
                     <TableCell>Payment Type</TableCell>
+                    <TableCell>Verification</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {shouldWaitForAdminDateRange ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center">
+                    <TableCell colSpan={10} align="center">
                       Select a date range to view earnings.
                     </TableCell>
                   </TableRow>
                 ) : filteredRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={10} align="center">
                       No earnings found.
                     </TableCell>
                   </TableRow>
@@ -293,6 +294,13 @@ export default function ReportTransactions() {
                       <TableCell>{row.Invoice || "-"}</TableCell>
                       <TableCell>{formatMoney(row.Cash || row.TotalAmount)}</TableCell>
                       <TableCell>{row.MOP || row.Type || "-"}</TableCell>
+                      <TableCell>
+                        {String(row.MOP || row.Type || "").trim().toUpperCase() === "CASH"
+                          ? "-"
+                          : row.Verified
+                            ? "VALIDATED"
+                            : "PENDING"}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
