@@ -15,6 +15,7 @@ import {
   Menu,
   MenuItem,
   Dialog,
+  DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
@@ -32,6 +33,7 @@ import RouterIcon from "@mui/icons-material/Router";
 import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -87,6 +89,8 @@ const createPaymentEntry = (overrides = {}) => ({
   reference: "",
   receiptAmount: "",
   transferDate: "",
+  receiverLast4: "",
+  receiptImageUrl: "",
   ...overrides
 });
 
@@ -1030,6 +1034,8 @@ function ClientList() {
   const [paymentEntries, setPaymentEntries] = useState([createPaymentEntry()]);
   const paymentReceiptRequestKeyRef = useRef("");
   const [receiptPreview, setReceiptPreview] = useState("");
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [receiptViewerSrc, setReceiptViewerSrc] = useState("");
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState("");
   const [dragActive, setDragActive] = useState(false);
@@ -1964,10 +1970,10 @@ function ClientList() {
     return moneyMatches[0] || "";
   };
 
-  const extractTransferDate = (text) => {
+    const extractTransferDate = (text) => {
     const cleaned = String(text || "").replace(/\r/g, " ").replace(/\n/g, " ");
     const monthNameMatch = cleaned.match(
-      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
     );
 
     if (monthNameMatch?.[0]) {
@@ -1980,6 +1986,36 @@ function ClientList() {
 
     if (slashDateTimeMatch?.[0]) {
       return String(slashDateTimeMatch[0]).replace(/\s+/g, " ").trim();
+    }
+
+    return "";
+  };
+
+    const extractReceiverLast4 = (text) => {
+    const raw = String(text || "");
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    const phonePattern = /(?:\+?63\s*9|09)[\d*?.\-\s]{4,24}?(\d{4})\b/i;
+
+    for (const line of lines) {
+      if (!/(?:\+?63|09)/i.test(line)) {
+        continue;
+      }
+      const lineMatch = line.match(phonePattern);
+      if (lineMatch?.[1]) {
+        return String(lineMatch[1]).trim();
+      }
+    }
+
+    const compactPhoneLine = lines.find((line) => /(?:\+?63|09)/i.test(line));
+    if (compactPhoneLine) {
+      const digitsOnly = compactPhoneLine.replace(/[^\d]/g, "");
+      if (digitsOnly.length >= 4) {
+        return digitsOnly.slice(-4);
+      }
     }
 
     return "";
@@ -2020,7 +2056,8 @@ function ClientList() {
       const extractedRef = extractReferenceNumber(ocrText);
       const extractedAmount = extractAmount(ocrText);
       const extractedTransferDate = extractTransferDate(ocrText);
-      const detectedMethod = detectPaymentMethodFromText(ocrText);
+        const extractedReceiverLast4 = extractReceiverLast4(ocrText);
+        const detectedMethod = detectPaymentMethodFromText(ocrText);
       const normalizedExtractedRef = String(extractedRef || "").trim().toUpperCase();
 
       if (
@@ -2078,12 +2115,17 @@ function ClientList() {
           amount: extractedAmount || next[nextIndex].amount,
           reference: extractedRef || next[nextIndex].reference,
           receiptAmount: extractedAmount || next[nextIndex].receiptAmount,
-          transferDate: extractedTransferDate || next[nextIndex].transferDate
+          transferDate: extractedTransferDate || next[nextIndex].transferDate,
+          receiverLast4: extractedReceiverLast4 || next[nextIndex].receiverLast4,
+          receiptImageUrl: previewUrl
         };
         return next;
       });
 
-      if (extractedRef || extractedAmount || extractedTransferDate) {
+      setReceiptPreview("");
+      setReceiptPreviewOpen(false);
+
+      if (extractedRef || extractedAmount || extractedTransferDate || extractedReceiverLast4) {
         const messageParts = [];
 
         if (detectedMethod) {
@@ -2096,8 +2138,11 @@ function ClientList() {
           messageParts.push(`Amount: ${extractedAmount}`);
         }
         if (extractedTransferDate) {
-          messageParts.push(`Transfer Date: ${extractedTransferDate}`);
-        }
+            messageParts.push(`Transfer Date: ${extractedTransferDate}`);
+          }
+          if (extractedReceiverLast4) {
+            messageParts.push(`Receiver Last 4: ${extractedReceiverLast4}`);
+          }
 
         setOcrMessage(messageParts.join(" | "));
       } else {
@@ -2242,8 +2287,22 @@ function ClientList() {
     }
 
     setReceiptPreview("");
+    setReceiptPreviewOpen(false);
     setOcrLoading(false);
     setOcrMessage("");
+  };
+
+  const revokeEntryReceiptUrls = (entries = []) => {
+    entries.forEach((entry) => {
+      const url = String(entry?.receiptImageUrl || "").trim();
+      if (url) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.warn("Failed to revoke receipt image URL:", error);
+        }
+      }
+    });
   };
 
   const handleReceiptPaste = (e) => {
@@ -2570,8 +2629,11 @@ function ClientList() {
       ReconnectCharge: 0,
       ReconnectMacAddress: ""
     });
+    revokeEntryReceiptUrls(paymentEntries);
     setPaymentEntries([createPaymentEntry()]);
     setReceiptPreview("");
+    setReceiptPreviewOpen(false);
+    setReceiptViewerSrc("");
     setOcrLoading(false);
     setOcrMessage("");
     setDragActive(false);
@@ -2725,7 +2787,9 @@ function ClientList() {
       method: normalizePaymentLineMethod(entry?.method),
       amount: Number(entry?.amount || 0),
       reference: String(entry?.reference || "").trim(),
-      receiptAmount: Number(entry?.receiptAmount || entry?.amount || 0)
+      receiptAmount: Number(entry?.receiptAmount || entry?.amount || 0),
+      transferDate: String(entry?.transferDate || "").trim(),
+      receiverLast4: String(entry?.receiverLast4 || "").trim()
     }))
     .filter((entry) => entry.method && entry.amount > 0);
   const totalPaymentReceived = normalizedPaymentEntries.reduce(
@@ -2773,9 +2837,9 @@ function ClientList() {
       : null;
 
   const subscriptionCoveredText =
-    subscriptionStartDate && subscriptionEndDate
-      ? `Subscription covered from ${subscriptionStartDate.toLocaleDateString(
-          "en-PH",
+      subscriptionStartDate && subscriptionEndDate
+        ? `Subscription covered from ${subscriptionStartDate.toLocaleDateString(
+            "en-PH",
           {
             year: "numeric",
             month: "long",
@@ -2785,8 +2849,21 @@ function ClientList() {
           year: "numeric",
           month: "long",
           day: "numeric"
-        })}`
-      : "";
+          })}`
+        : "";
+
+  const nextDueDateDisplay = dueDateValue
+    ? (() => {
+        const nextDueDate = addOneMonthToDate(dueDateValue, subscriptionAnchorDay);
+        return nextDueDate
+          ? new Date(nextDueDate).toLocaleDateString("en-PH", {
+              year: "numeric",
+              month: "short",
+              day: "numeric"
+            })
+          : "N/A";
+      })()
+    : "N/A";
 
   const projectedBalance =
     totalAmountToPay - totalPaymentReceived;
@@ -2828,6 +2905,15 @@ function ClientList() {
 
   const handleRemovePaymentEntry = (index) => {
     setPaymentEntries((prev) => {
+      const targetUrl = String(prev[index]?.receiptImageUrl || "").trim();
+      if (targetUrl) {
+        try {
+          URL.revokeObjectURL(targetUrl);
+        } catch (error) {
+          console.warn("Failed to revoke payment entry receipt image:", error);
+        }
+      }
+
       if (prev.length === 1) {
         return [createPaymentEntry()];
       }
@@ -2868,16 +2954,21 @@ function ClientList() {
     const paymentReceiptNumber = paymentForm.ReferenceNumber || "";
     const salesInvoiceNumber = paymentForm.Invoice || toSalesInvoiceNumber(paymentReceiptNumber);
     const paymentBreakdown = normalizedPaymentEntries.map((entry) => ({
-      Method: entry.method,
-      Amount: entry.amount,
-      Reference: entry.method === "CASH" ? "" : entry.reference,
-      ReceiptAmount: entry.method === "CASH" ? entry.amount : entry.receiptAmount || entry.amount,
-      TransferDate: entry.method === "CASH" ? "" : String(entry.transferDate || "").trim()
-    }));
-    const topLevelTransferDate =
-      normalizedPaymentEntries.find(
-        (entry) => entry.method !== "CASH" && String(entry.transferDate || "").trim()
-      )?.transferDate || "";
+        Method: entry.method,
+        Amount: entry.amount,
+        Reference: entry.method === "CASH" ? "" : entry.reference,
+        ReceiptAmount: entry.method === "CASH" ? entry.amount : entry.receiptAmount || entry.amount,
+        TransferDate: entry.method === "CASH" ? "" : String(entry.transferDate || "").trim(),
+        ReceiverLast4: entry.method === "CASH" ? "" : String(entry.receiverLast4 || "").trim()
+      }));
+      const topLevelTransferDate =
+        normalizedPaymentEntries.find(
+          (entry) => entry.method !== "CASH" && String(entry.transferDate || "").trim()
+        )?.transferDate || "";
+      const topLevelReceiverLast4 =
+        normalizedPaymentEntries.find(
+          (entry) => entry.method !== "CASH" && String(entry.receiverLast4 || "").trim()
+        )?.receiverLast4 || "";
 
     if (!selectedClient?._id) {
       showMessage("No Client Selected", "Please select a client first.", "warning");
@@ -3047,8 +3138,10 @@ function ClientList() {
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
         PaymentBreakdown: paymentBreakdown,
-        TransferDate: topLevelTransferDate,
-        GCashTransferDate: topLevelTransferDate,
+          TransferDate: topLevelTransferDate,
+          GCashTransferDate: topLevelTransferDate,
+          ReceiverLast4: topLevelReceiverLast4,
+          GCashReceiverLast4: topLevelReceiverLast4,
         DeclaredBy: createdByName || createdById,
         DeclaredById: createdById,
         TransactionDate: transactionDateTime
@@ -3068,8 +3161,10 @@ function ClientList() {
         MOP: topLevelPaymentMethod,
         MOPRef: topLevelPaymentReference,
         ReferenceNumber: topLevelPaymentReference,
-        TransferDate: topLevelTransferDate,
-        GCashTransferDate: topLevelTransferDate,
+          TransferDate: topLevelTransferDate,
+          GCashTransferDate: topLevelTransferDate,
+          ReceiverLast4: topLevelReceiverLast4,
+          GCashReceiverLast4: topLevelReceiverLast4,
         Verified: false,
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
@@ -4169,280 +4264,296 @@ function ClientList() {
             </Box>
           ) : (
           <>
-          <Paper elevation={0} sx={{ ...formSectionSx, p: 1.1, mb: 1.2 }}>
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: { xs: "flex-start", md: "center" },
-                flexDirection: { xs: "column", md: "row" },
-                gap: 1,
-                mb: 0.7
-              }}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: 1
-                }}
-              >
-                <Typography
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", xl: "0.74fr 0.5fr 1.46fr" },
+              gap: 2
+            }}
+          >
+            <Box sx={{ display: "grid", gap: 2 }}>
+              <Paper elevation={0} sx={formSectionSx}>
+                <Box
                   sx={{
-                    fontSize: "0.58rem",
-                    fontWeight: 700,
-                    color: "#64748b",
-                    textTransform: "uppercase",
-                    letterSpacing: 0.4
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: { xs: "flex-start", md: "center" },
+                    flexDirection: { xs: "column", md: "row" },
+                    gap: 1,
+                    mb: 1.2
                   }}
                 >
-                  Account
-                </Typography>
-                <Typography sx={{ fontSize: "0.82rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
-                  {selectedClient?.AccountName || "N/A"}
-                </Typography>
-                <Typography sx={{ fontSize: "0.7rem", color: "#64748b", lineHeight: 1.1 }}>
-                  Account No. {selectedClient?.AccountNumber || "N/A"}
-                </Typography>
-              </Box>
-
-              <Chip
-                label={hasPaymentEntries ? `${normalizedPaymentEntries.length} PAYMENT ${normalizedPaymentEntries.length === 1 ? "ENTRY" : "ENTRIES"}` : "NO PAYMENT ENTRY"}
-                sx={{
-                  borderRadius: "999px",
-                  height: 20,
-                  fontSize: "0.62rem",
-                  fontWeight: 700,
-                  backgroundColor: "#ecfdf5",
-                  color: "#166534"
-                }}
-              />
-            </Box>
-
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr 1fr" },
-                gap: 0.75
-              }}
-            >
-                {paymentRequiresReconnectFlow ? (
-                  <Paper elevation={0} sx={summaryCardSx}>
-                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                      Reconnect Type
-                    </Typography>
-                    <TextField
-                      select
-                      value={paymentForm.ReconnectAuthMode}
-                      onChange={handleReconnectAuthModeChange}
-                      fullWidth
-                      variant="standard"
-                      SelectProps={{ displayEmpty: true }}
-                      InputProps={{ disableUnderline: true }}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 1
+                    }}
+                  >
+                    <Typography
                       sx={{
-                        mt: 0.2,
-                        "& .MuiInputBase-input": {
-                          px: 0,
-                          py: 0.08,
-                          fontSize: "0.8rem",
-                          fontWeight: 700,
-                          color: "#0f172a"
-                        }
+                        fontSize: "0.58rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.4
                       }}
                     >
-                      <MenuItem value="">Select Type</MenuItem>
-                      <MenuItem value="PPPOE">PPPOE</MenuItem>
-                      <MenuItem value="IPOE">IPOE</MenuItem>
-                    </TextField>
-                  </Paper>
-                ) : null}
-
-                {paymentRequiresReconnectFlow &&
-                paymentSelectedAuthMode === "IPOE" ? (
-                  <Paper elevation={0} sx={summaryCardSx}>
-                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                      MAC Address
+                      Account
                     </Typography>
-                    <TextField
-                      select
-                      value={paymentForm.ReconnectMacAddress}
-                      onChange={(event) =>
-                        setPaymentForm((prev) => ({
-                          ...prev,
-                          ReconnectMacAddress: String(event.target.value || "")
-                            .trim()
-                            .toUpperCase()
-                        }))
-                      }
-                      fullWidth
-                      variant="standard"
-                      SelectProps={{ displayEmpty: true }}
-                      InputProps={{ disableUnderline: true }}
-                      sx={{
-                        mt: 0.2,
-                        "& .MuiInputBase-input": {
-                          px: 0,
-                          py: 0.08,
-                          fontSize: "0.8rem",
-                          fontWeight: 700,
-                          color: "#0f172a"
-                        }
-                      }}
-                    >
-                      <MenuItem value="">Select MAC Address</MenuItem>
-                      {displayedPaymentDhcpLeaseOptions.map((mac) => (
-                        <MenuItem key={mac} value={mac}>
-                          {mac}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Paper>
-                ) : null}
+                    <Typography sx={{ fontSize: "0.78rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
+                      {selectedClient?.AccountName || "N/A"}
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.66rem", color: "#64748b", lineHeight: 1.1 }}>
+                      Account No. {selectedClient?.AccountNumber || "N/A"}
+                    </Typography>
+                  </Box>
+                </Box>
 
-                <Paper elevation={0} sx={summaryCardSx}>
-                  <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                    Subscription Plan
-                  </Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
+                  Customer Details
+                </Typography>
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "1fr 1fr" },
+                    gap: 0.85
+                  }}
+                >
                   {paymentRequiresReconnectFlow ? (
-                    <TextField
-                      select
-                      value={paymentForm.ReconnectPlan}
-                      onChange={handleReconnectPlanChange}
-                      fullWidth
-                      variant="standard"
-                      SelectProps={{ displayEmpty: true }}
-                      InputProps={{ disableUnderline: true }}
-                      sx={{
-                        mt: 0.2,
-                        "& .MuiInputBase-input": {
-                          px: 0,
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        Reconnect Type
+                      </Typography>
+                      <TextField
+                        select
+                        value={paymentForm.ReconnectAuthMode}
+                        onChange={handleReconnectAuthModeChange}
+                        fullWidth
+                        variant="standard"
+                        SelectProps={{ displayEmpty: true }}
+                        InputProps={{ disableUnderline: true }}
+                        sx={{
+                          mt: 0.2,
+                          "& .MuiInputBase-input": {
+                            px: 0,
                             py: 0.08,
                             fontSize: "0.8rem",
                             fontWeight: 700,
                             color: "#0f172a"
+                          }
+                        }}
+                      >
+                        <MenuItem value="">Select Type</MenuItem>
+                        <MenuItem value="PPPOE">PPPOE</MenuItem>
+                        <MenuItem value="IPOE">IPOE</MenuItem>
+                      </TextField>
+                    </Paper>
+                  ) : null}
+
+                  {paymentRequiresReconnectFlow &&
+                  paymentSelectedAuthMode === "IPOE" ? (
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        MAC Address
+                      </Typography>
+                      <TextField
+                        select
+                        value={paymentForm.ReconnectMacAddress}
+                        onChange={(event) =>
+                          setPaymentForm((prev) => ({
+                            ...prev,
+                            ReconnectMacAddress: String(event.target.value || "")
+                              .trim()
+                              .toUpperCase()
+                          }))
                         }
-                      }}
-                    >
-                      <MenuItem value="">Select New Plan</MenuItem>
-                      {paymentReconnectPlanOptions.map((plan) => (
+                        fullWidth
+                        variant="standard"
+                        SelectProps={{ displayEmpty: true }}
+                        InputProps={{ disableUnderline: true }}
+                        sx={{
+                          mt: 0.2,
+                          "& .MuiInputBase-input": {
+                            px: 0,
+                            py: 0.08,
+                            fontSize: "0.8rem",
+                            fontWeight: 700,
+                            color: "#0f172a"
+                          }
+                        }}
+                      >
+                        <MenuItem value="">Select MAC Address</MenuItem>
+                        {displayedPaymentDhcpLeaseOptions.map((mac) => (
+                          <MenuItem key={mac} value={mac}>
+                            {mac}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Paper>
+                  ) : null}
+
+                  <Paper elevation={0} sx={summaryCardSx}>
+                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                      Subscription Plan
+                    </Typography>
+                    {paymentRequiresReconnectFlow ? (
+                      <TextField
+                        select
+                        value={paymentForm.ReconnectPlan}
+                        onChange={handleReconnectPlanChange}
+                        fullWidth
+                        variant="standard"
+                        SelectProps={{ displayEmpty: true }}
+                        InputProps={{ disableUnderline: true }}
+                        sx={{
+                          mt: 0.2,
+                          "& .MuiInputBase-input": {
+                            px: 0,
+                            py: 0.08,
+                            fontSize: "0.8rem",
+                            fontWeight: 700,
+                            color: "#0f172a"
+                          }
+                        }}
+                      >
+                        <MenuItem value="">Select New Plan</MenuItem>
+                        {paymentReconnectPlanOptions.map((plan) => (
                           <MenuItem key={plan._id} value={getPlanName(plan)}>
                             {getPlanName(plan)}
                           </MenuItem>
                         ))}
-                    </TextField>
-                  ) : (
-                    <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
-                      {displayedPaymentPlan}
+                      </TextField>
+                    ) : (
+                      <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
+                        {displayedPaymentPlan}
+                      </Typography>
+                    )}
+                  </Paper>
+
+                  <Paper elevation={0} sx={summaryCardSx}>
+                    <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                      Payment Reference
                     </Typography>
-                  )}
-                </Paper>
+                    <TextField
+                      name="ReferenceNumber"
+                      value={paymentForm.ReferenceNumber}
+                      onChange={handlePaymentChange}
+                      fullWidth
+                      variant="standard"
+                      InputProps={{ disableUnderline: true }}
+                      sx={{
+                        mt: 0.2,
+                        "& .MuiInputBase-input": {
+                          px: 0,
+                          py: 0.08,
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          color: "#0f172a"
+                        }
+                      }}
+                    />
+                  </Paper>
 
-              <Paper elevation={0} sx={summaryCardSx}>
-                <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                  Payment Reference
-                </Typography>
-                <TextField
-                  name="ReferenceNumber"
-                  value={paymentForm.ReferenceNumber}
-                  onChange={handlePaymentChange}
-                  fullWidth
-                  variant="standard"
-                  InputProps={{ disableUnderline: true }}
-                  sx={{
-                    mt: 0.2,
-                    "& .MuiInputBase-input": {
-                      px: 0,
-                      py: 0.08,
-                      fontSize: "0.8rem",
-                      fontWeight: 700,
-                      color: "#0f172a"
-                    }
-                  }}
-                />
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        Due Date
+                      </Typography>
+                      <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
+                        {selectedClient?.DueDate
+                          ? new Date(selectedClient.DueDate).toLocaleDateString("en-PH", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric"
+                            })
+                          : "N/A"}
+                      </Typography>
+                    </Paper>
+
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        Next Due Date
+                      </Typography>
+                      <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
+                        {nextDueDateDisplay}
+                      </Typography>
+                    </Paper>
+
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        SubTotal
+                      </Typography>
+                    <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
+                      PHP {planAmount}
+                    </Typography>
+                  </Paper>
+                </Box>
               </Paper>
 
-              <Paper elevation={0} sx={summaryCardSx}>
-                <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                  Due Date
+              <Paper elevation={0} sx={formSectionSx}>
+                <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
+                  Receipt Details
                 </Typography>
-                <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
-                  {selectedClient?.DueDate
-                    ? new Date(selectedClient.DueDate).toLocaleDateString("en-PH", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric"
-                      })
-                    : "N/A"}
-                </Typography>
-              </Paper>
 
-                <Paper elevation={0} sx={summaryCardSx}>
-                  <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                    SubTotal
-                  </Typography>
-                  <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
-                    PHP {planAmount}
-                  </Typography>
-                </Paper>
-            </Box>
-          </Paper>
+                <Box sx={{ mb: 1.5 }}>
+                  <TextField
+                    label="Subscription Covered"
+                    value={subscriptionCoveredText}
+                    fullWidth
+                    multiline
+                    rows={2}
+                    InputProps={{ readOnly: true }}
+                    sx={compactFieldSx}
+                  />
+                </Box>
 
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", xl: "0.82fr 0.76fr 1.12fr" },
-              gap: 2
-            }}
-          >
-            <Paper elevation={0} sx={formSectionSx}>
-              <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
-                Receipt Details
-              </Typography>
-
-              <Box sx={{ mb: 1.5 }}>
                 <TextField
-                  label="Subscription Covered"
-                  value={subscriptionCoveredText}
+                  label="Additional Charge Description"
+                  name="Notes"
                   fullWidth
                   multiline
                   rows={2}
-                  InputProps={{ readOnly: true }}
+                  value={paymentForm.Notes}
+                  onChange={handlePaymentChange}
                   sx={compactFieldSx}
                 />
-              </Box>
-
-              <TextField
-                label="Additional Charge Description"
-                name="Notes"
-                fullWidth
-                multiline
-                rows={2}
-                value={paymentForm.Notes}
-                onChange={handlePaymentChange}
-                sx={compactFieldSx}
-              />
-            </Paper>
+              </Paper>
+            </Box>
 
             <Paper elevation={0} sx={formSectionSx}>
               <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", mb: 1, color: "#0f172a" }}>
                 Payment Breakdown
               </Typography>
 
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "150px 1fr",
-                  gap: 1.1,
-                  "& .MuiTextField-root": {
-                    backgroundColor: "#fff"
-                  }
-                }}
-              >
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Additional Charge
-                </Typography>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    rowGap: 3.35,
+                    justifyItems: "start",
+                    "& .MuiTextField-root": {
+                      backgroundColor: "#fff",
+                      width: "100%",
+                      maxWidth: 430
+                    },
+                    "& .MuiTextField-root .MuiInputLabel-root": {
+                      fontSize: "1.22rem",
+                      fontWeight: 700
+                    },
+                    "& .MuiTextField-root .MuiInputBase-root": {
+                      minHeight: 102
+                    },
+                    "& .MuiTextField-root .MuiInputBase-input": {
+                      py: 2.55,
+                      fontSize: "1.3rem",
+                      fontWeight: 700
+                    }
+                  }}
+                >
                 <TextField
+                  label="Additional Charge"
                   name="AdditionalCharge"
                   value={paymentForm.AdditionalCharge}
                   onChange={handlePaymentChange}
@@ -4450,20 +4561,16 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  VAT
-                </Typography>
                 <TextField
+                  label="VAT"
                   value="0"
                   fullWidth
                   InputProps={{ readOnly: true }}
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Discount / Others
-                </Typography>
                 <TextField
+                  label="Discount / Others"
                   name="Discount"
                   value={paymentForm.Discount}
                   onChange={handlePaymentChange}
@@ -4471,40 +4578,32 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", fontWeight: 700, alignSelf: "center", color: "#0f172a" }}>
-                  Total Amount to Pay
-                </Typography>
                 <TextField
+                  label="Total Amount to Pay"
                   value={totalAmountToPay}
                   fullWidth
                   InputProps={{ readOnly: true }}
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Ending Balance
-                </Typography>
                 <TextField
+                  label="Ending Balance"
                   value={projectedBalance}
                   fullWidth
                   InputProps={{ readOnly: true }}
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Payment Received Total
-                </Typography>
                 <TextField
+                  label="Payment Received Total"
                   value={totalPaymentReceived}
                   fullWidth
                   InputProps={{ readOnly: true }}
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Sales Invoice
-                </Typography>
                 <TextField
+                  label="Sales Invoice"
                   name="Invoice"
                   value={paymentForm.Invoice}
                   onChange={handlePaymentChange}
@@ -4512,10 +4611,8 @@ function ClientList() {
                   sx={compactFieldSx}
                 />
 
-                <Typography sx={{ fontSize: "10px", alignSelf: "center", color: "#475569" }}>
-                  Contact Number
-                </Typography>
                 <TextField
+                  label="Contact Number"
                   name="ContactNumber"
                   value={paymentForm.ContactNumber}
                   onChange={handlePaymentChange}
@@ -4539,13 +4636,19 @@ function ClientList() {
                 <Typography sx={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>
                   Payment Entries
                 </Typography>
-                <Button
-                  variant="contained"
-                  onClick={handleAddPaymentEntry}
-                  sx={{ textTransform: "none", fontWeight: 700 }}
-                >
-                  Add Entry
-                </Button>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Chip
+                    label={hasPaymentEntries ? `${normalizedPaymentEntries.length} PAYMENT ${normalizedPaymentEntries.length === 1 ? "ENTRY" : "ENTRIES"}` : "NO PAYMENT ENTRY"}
+                    sx={{
+                      borderRadius: "999px",
+                      height: 20,
+                      fontSize: "0.62rem",
+                      fontWeight: 700,
+                      backgroundColor: hasPaymentEntries ? "#ecfdf5" : "#f8fafc",
+                      color: hasPaymentEntries ? "#166534" : "#64748b"
+                    }}
+                  />
+                </Box>
               </Box>
 
               <Paper
@@ -4608,12 +4711,19 @@ function ClientList() {
                     border: "2px dashed",
                     borderColor: dragActive ? "#2563eb" : "#cbd5e1",
                     borderRadius: 3,
-                    p: 2,
+                    px: 2,
+                    py: 1.5,
+                    minHeight: receiptPreview ? 190 : 82,
                     textAlign: "center",
                     backgroundColor: dragActive ? "#eff6ff" : "#f8fafc",
                     outline: "none",
                     cursor: "pointer",
-                    transition: "all 0.2s ease"
+                    transition: "all 0.2s ease",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 1
                   }}
                 >
                   <Button
@@ -4632,19 +4742,26 @@ function ClientList() {
                   </Button>
 
                   {receiptPreview && (
-                    <Box sx={{ mt: 2 }}>
+                    <Box sx={{ mt: 0.75 }}>
                       <Box
                         component="img"
                         src={receiptPreview}
                         alt="Receipt preview"
+                        onClick={() => setReceiptPreviewOpen(true)}
                         sx={{
+                          width: 88,
                           maxWidth: "100%",
-                          maxHeight: 180,
+                          maxHeight: 136,
                           borderRadius: 2,
                           border: "1px solid #dbe4ee",
-                          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)"
+                          boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
+                          objectFit: "cover",
+                          cursor: "zoom-in"
                         }}
                       />
+                      <Typography sx={{ mt: 0.6, fontSize: "0.68rem", color: "#64748b" }}>
+                        Click image to enlarge
+                      </Typography>
                     </Box>
                   )}
 
@@ -4656,88 +4773,183 @@ function ClientList() {
                 </Box>
               </Paper>
 
-              <Box sx={{ display: "grid", gap: 1.25 }}>
-                {paymentEntries.map((entry, index) => (
-                  <Paper
-                    key={`payment-entry-${index}`}
-                    elevation={0}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 3,
-                      border: "1px solid #dbe4ee",
-                      backgroundColor: "#fff"
-                    }}
-                  >
-                    <Box
+              <Paper
+                elevation={0}
+                sx={{
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff",
+                  overflow: "hidden"
+                }}
+              >
+                <Box
+                  sx={{
+                    display: { xs: "none", md: "grid" },
+                    gridTemplateColumns: { md: "1fr 0.82fr 1.22fr 1fr 0.56fr 0.8fr 110px" },
+                    gap: 1,
+                    px: 1.5,
+                    py: 1.1,
+                    alignItems: "center",
+                    backgroundColor: "#f8fafc",
+                    borderBottom: "1px solid #dbe4ee"
+                  }}
+                >
+                  {["Mode of Payment", "Amount", "Reference", "Transfer Date", "Receiver Last 4", "Receipt"].map((header) => (
+                    <Typography
+                      key={header}
                       sx={{
-                        display: "grid",
-                        gridTemplateColumns: { xs: "1fr", md: "1.05fr 0.85fr 1.05fr auto" },
-                        gap: 1,
-                        alignItems: "center"
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.2
                       }}
                     >
-                      <TextField
-                        select
-                        label="Mode of Payment"
-                        value={entry.method}
-                        onChange={(event) =>
-                          handlePaymentEntryChange(index, "method", event.target.value)
-                        }
+                      {header}
+                    </Typography>
+                  ))}
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.2
+                      }}
+                    >
+                      Action
+                    </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={handleAddPaymentEntry}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        color: "#2563eb",
+                        border: "1px solid #bfdbfe",
+                        backgroundColor: "#eff6ff",
+                        "&:hover": { backgroundColor: "#dbeafe" }
+                      }}
+                    >
+                      <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: "grid" }}>
+                  {paymentEntries.map((entry, index) => (
+                    <Box
+                      key={`payment-entry-${index}`}
+                      sx={{
+                        px: 1.5,
+                        py: 1.2,
+                        borderTop: index === 0 ? "none" : "1px solid #eef2f7"
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns: { xs: "1fr", md: "1fr 0.82fr 1.22fr 1fr 0.56fr 0.8fr 110px" },
+                          gap: 1,
+                          alignItems: "start"
+                        }}
                       >
-                        <MenuItem value="CASH">CASH</MenuItem>
-                        <MenuItem value="GCASH">GCASH</MenuItem>
-                        <MenuItem value="PAYMAYA">PAYMAYA</MenuItem>
-                        <MenuItem value="BANK">BANK</MenuItem>
-                      </TextField>
+                        <TextField
+                          select
+                          placeholder="Mode of Payment"
+                          size="small"
+                          value={entry.method}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "method", event.target.value)
+                          }
+                        >
+                          <MenuItem value="CASH">CASH</MenuItem>
+                          <MenuItem value="GCASH">GCASH</MenuItem>
+                          <MenuItem value="PAYMAYA">PAYMAYA</MenuItem>
+                          <MenuItem value="BANK">BANK</MenuItem>
+                        </TextField>
 
-                      <TextField
-                        label="Amount"
-                        value={entry.amount}
-                        onChange={(event) =>
-                          handlePaymentEntryChange(index, "amount", event.target.value)
-                        }
-                      />
+                        <TextField
+                          label={undefined}
+                          placeholder="Amount"
+                          size="small"
+                          value={entry.amount}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "amount", event.target.value)
+                          }
+                        />
 
-                      <TextField
-                        label="Reference"
-                        value={entry.reference}
-                        onChange={(event) =>
-                          handlePaymentEntryChange(index, "reference", event.target.value)
-                        }
-                        disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
-                        helperText={
-                          normalizePaymentLineMethod(entry.method) === "CASH"
-                            ? "Not required for cash"
-                            : "Required for non-cash"
-                        }
-                      />
+                        <TextField
+                          label={undefined}
+                          placeholder="Reference"
+                          size="small"
+                          value={entry.reference}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "reference", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
 
-                      <TextField
-                        label="Transfer Date"
-                        value={entry.transferDate || ""}
-                        onChange={(event) =>
-                          handlePaymentEntryChange(index, "transferDate", event.target.value)
-                        }
-                        disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
-                        helperText={
-                          normalizePaymentLineMethod(entry.method) === "CASH"
-                            ? "Not required for cash"
-                            : "From GCash / non-cash receipt"
-                        }
-                      />
+                        <TextField
+                          label={undefined}
+                          placeholder="Transfer Date"
+                          size="small"
+                          value={entry.transferDate || ""}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "transferDate", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
 
-                      <Button
-                        color="error"
-                        variant="outlined"
-                        onClick={() => handleRemovePaymentEntry(index)}
-                        sx={{ textTransform: "none", fontWeight: 700, minWidth: 92 }}
-                      >
-                        Remove
-                      </Button>
+                        <TextField
+                          label={undefined}
+                          placeholder="Receiver Last 4"
+                          size="small"
+                          value={entry.receiverLast4 || ""}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "receiverLast4", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
+
+                        <Box sx={{ display: "flex", alignItems: "center", minHeight: 40 }}>
+                          {entry.receiptImageUrl ? (
+                            <Button
+                              variant="text"
+                              size="small"
+                              onClick={() => {
+                                setReceiptViewerSrc(entry.receiptImageUrl);
+                                setReceiptPreviewOpen(true);
+                              }}
+                              sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
+                            >
+                              View
+                            </Button>
+                          ) : (
+                            <Typography sx={{ fontSize: "0.76rem", color: "#94a3b8" }}>-</Typography>
+                          )}
+                        </Box>
+
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          onClick={() => handleRemovePaymentEntry(index)}
+                          sx={{ textTransform: "none", fontWeight: 700, minWidth: 92, alignSelf: "center" }}
+                        >
+                          Remove
+                        </Button>
+                      </Box>
+
+                      {normalizePaymentLineMethod(entry.method) !== "CASH" && (
+                        <Typography sx={{ mt: 0.7, fontSize: "0.68rem", color: "#64748b" }}>
+                          Non-cash entry: reference, transfer date, and receiver last 4 can be saved from the receipt.
+                        </Typography>
+                      )}
                     </Box>
-                  </Paper>
                 ))}
               </Box>
+              </Paper>
 
               <Paper
                 elevation={0}
@@ -4888,12 +5100,19 @@ function ClientList() {
                 border: "2px dashed",
                 borderColor: dragActive ? "#2563eb" : "#cbd5e1",
                 borderRadius: 3,
-                p: 2.5,
+                px: 2,
+                py: 1.5,
+                minHeight: receiptPreview ? 190 : 82,
                 textAlign: "center",
                 backgroundColor: dragActive ? "#eff6ff" : "#f8fafc",
                 outline: "none",
                 cursor: "pointer",
-                transition: "all 0.2s ease"
+                transition: "all 0.2s ease",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 1
               }}
             >
               <Button
@@ -4912,19 +5131,26 @@ function ClientList() {
               </Button>
 
               {receiptPreview && (
-                <Box sx={{ mt: 2 }}>
+                <Box sx={{ mt: 0.75 }}>
                   <Box
                     component="img"
                     src={receiptPreview}
                     alt="Receipt preview"
+                    onClick={() => setReceiptPreviewOpen(true)}
                     sx={{
+                      width: 88,
                       maxWidth: "100%",
-                      maxHeight: 180,
+                      maxHeight: 136,
                       borderRadius: 2,
                       border: "1px solid #dbe4ee",
-                      boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)"
+                      boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
+                      objectFit: "cover",
+                      cursor: "zoom-in"
                     }}
                   />
+                  <Typography sx={{ mt: 0.6, fontSize: "0.68rem", color: "#64748b" }}>
+                    Click image to enlarge
+                  </Typography>
                 </Box>
               )}
 
@@ -4936,107 +5162,193 @@ function ClientList() {
             </Box>
           </Paper>
 
-          <Box sx={{ display: "grid", gap: 1.5 }}>
-            {paymentEntries.map((entry, index) => (
               <Paper
-                key={`payment-entry-${index}`}
                 elevation={0}
                 sx={{
-                  p: 2,
                   borderRadius: 3,
                   border: "1px solid #dbe4ee",
-                  backgroundColor: "#fff"
+                  backgroundColor: "#fff",
+                  overflow: "hidden"
                 }}
               >
                 <Box
                   sx={{
-                    display: "grid",
-                    gridTemplateColumns: { xs: "1fr", md: "1.1fr 1fr 1.1fr auto" },
+                    display: { xs: "none", md: "grid" },
+                    gridTemplateColumns: { md: "1fr 0.82fr 1.22fr 1fr 0.56fr 0.8fr 110px" },
                     gap: 1.25,
-                    alignItems: "center"
+                    px: 1.5,
+                    py: 1.1,
+                    alignItems: "center",
+                    backgroundColor: "#f8fafc",
+                    borderBottom: "1px solid #dbe4ee"
                   }}
                 >
-                  <TextField
-                    select
-                    label="Mode of Payment"
-                    value={entry.method}
-                    onChange={(event) =>
-                      handlePaymentEntryChange(index, "method", event.target.value)
-                    }
-                  >
-                    <MenuItem value="CASH">CASH</MenuItem>
-                    <MenuItem value="GCASH">GCASH</MenuItem>
-                    <MenuItem value="PAYMAYA">PAYMAYA</MenuItem>
-                    <MenuItem value="BANK">BANK</MenuItem>
-                  </TextField>
+                  {["Mode of Payment", "Amount", "Reference", "Transfer Date", "Receiver Last 4", "Receipt"].map((header) => (
+                    <Typography
+                      key={`modal-${header}`}
+                      sx={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.2
+                      }}
+                    >
+                      {header}
+                    </Typography>
+                  ))}
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 0.5 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: 0.2
+                      }}
+                    >
+                      Action
+                    </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={handleAddPaymentEntry}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        color: "#2563eb",
+                        border: "1px solid #bfdbfe",
+                        backgroundColor: "#eff6ff",
+                        "&:hover": { backgroundColor: "#dbeafe" }
+                      }}
+                    >
+                      <AddCircleOutlineIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
+                </Box>
 
-                  <TextField
-                    label="Amount"
-                    value={entry.amount}
-                    onChange={(event) =>
-                      handlePaymentEntryChange(index, "amount", event.target.value)
-                    }
-                  />
+                <Box sx={{ display: "grid" }}>
+                  {paymentEntries.map((entry, index) => (
+                    <Box
+                      key={`payment-entry-${index}`}
+                      sx={{
+                        px: 1.5,
+                        py: 1.2,
+                        borderTop: index === 0 ? "none" : "1px solid #eef2f7"
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "grid",
+                          gridTemplateColumns: { xs: "1fr", md: "1fr 0.82fr 1.22fr 1fr 0.56fr 0.8fr 110px" },
+                          gap: 1.25,
+                          alignItems: "start"
+                        }}
+                      >
+                        <TextField
+                          select
+                          placeholder="Mode of Payment"
+                          size="small"
+                          value={entry.method}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "method", event.target.value)
+                          }
+                        >
+                          <MenuItem value="CASH">CASH</MenuItem>
+                          <MenuItem value="GCASH">GCASH</MenuItem>
+                          <MenuItem value="PAYMAYA">PAYMAYA</MenuItem>
+                          <MenuItem value="BANK">BANK</MenuItem>
+                        </TextField>
 
-                  <TextField
-                    label="Reference"
-                    value={entry.reference}
-                    onChange={(event) =>
-                      handlePaymentEntryChange(index, "reference", event.target.value)
-                    }
-                    disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
-                    helperText={
-                      normalizePaymentLineMethod(entry.method) === "CASH"
-                        ? "Not required for cash"
-                        : "Required for non-cash"
-                    }
-                  />
+                        <TextField
+                          label={undefined}
+                          placeholder="Amount"
+                          size="small"
+                          value={entry.amount}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "amount", event.target.value)
+                          }
+                        />
 
-                  <TextField
-                    label="Transfer Date"
-                    value={entry.transferDate || ""}
-                    onChange={(event) =>
-                      handlePaymentEntryChange(index, "transferDate", event.target.value)
-                    }
-                    disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
-                    helperText={
-                      normalizePaymentLineMethod(entry.method) === "CASH"
-                        ? "Not required for cash"
-                        : "From GCash / non-cash receipt"
-                    }
-                  />
+                        <TextField
+                          label={undefined}
+                          placeholder="Reference"
+                          size="small"
+                          value={entry.reference}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "reference", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
 
-                  <Button
-                    color="error"
-                    variant="outlined"
-                    onClick={() => handleRemovePaymentEntry(index)}
-                    sx={{ textTransform: "none", fontWeight: 700, minWidth: 104 }}
-                  >
-                    Remove
-                  </Button>
+                        <TextField
+                          label={undefined}
+                          placeholder="Transfer Date"
+                          size="small"
+                          value={entry.transferDate || ""}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "transferDate", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
+
+                        <TextField
+                          label={undefined}
+                          placeholder="Receiver Last 4"
+                          size="small"
+                          value={entry.receiverLast4 || ""}
+                          onChange={(event) =>
+                            handlePaymentEntryChange(index, "receiverLast4", event.target.value)
+                          }
+                          disabled={normalizePaymentLineMethod(entry.method) === "CASH"}
+                        />
+
+                        <Box sx={{ display: "flex", alignItems: "center", minHeight: 40 }}>
+                          {entry.receiptImageUrl ? (
+                            <Button
+                              variant="text"
+                              size="small"
+                              onClick={() => {
+                                setReceiptViewerSrc(entry.receiptImageUrl);
+                                setReceiptPreviewOpen(true);
+                              }}
+                              sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
+                            >
+                              View
+                            </Button>
+                          ) : (
+                            <Typography sx={{ fontSize: "0.76rem", color: "#94a3b8" }}>-</Typography>
+                          )}
+                        </Box>
+
+                        <Button
+                          color="error"
+                          variant="outlined"
+                          onClick={() => handleRemovePaymentEntry(index)}
+                          sx={{ textTransform: "none", fontWeight: 700, minWidth: 96, alignSelf: "center" }}
+                        >
+                          Remove
+                        </Button>
+                      </Box>
+
+                      {normalizePaymentLineMethod(entry.method) !== "CASH" && (
+                        <Typography sx={{ mt: 0.7, fontSize: "0.68rem", color: "#64748b" }}>
+                          Non-cash entry: reference, transfer date, and receiver last 4 can be saved from the receipt.
+                        </Typography>
+                      )}
+                    </Box>
+                  ))}
                 </Box>
               </Paper>
-            ))}
-          </Box>
 
           <Box
             sx={{
               display: "flex",
-              justifyContent: "space-between",
+              justifyContent: "flex-end",
               alignItems: { xs: "flex-start", md: "center" },
-              flexDirection: { xs: "column", md: "row" },
               gap: 1.5,
               mt: 2.5
             }}
           >
-            <Button
-              variant="contained"
-              onClick={handleAddPaymentEntry}
-              sx={{ textTransform: "none", fontWeight: 700 }}
-            >
-              Add Payment Entry
-            </Button>
-
             <Paper
               elevation={0}
               sx={{
@@ -5057,11 +5369,68 @@ function ClientList() {
           </Box>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, py: 2, borderTop: "1px solid #dbe4ee" }}>
+      <DialogActions sx={{ px: 3, py: 2, borderTop: "1px solid #dbe4ee" }}>
           <Button onClick={handleClosePaymentEntriesModal} sx={{ textTransform: "none", fontWeight: 700 }}>
             Done
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={receiptPreviewOpen}
+        onClose={() => {
+          setReceiptPreviewOpen(false);
+          setReceiptViewerSrc("");
+        }}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden"
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            backgroundColor: "#0f172a",
+            color: "#fff",
+            fontSize: "1rem",
+            fontWeight: 700
+          }}
+        >
+          Receipt Preview
+          <IconButton
+            onClick={() => {
+              setReceiptPreviewOpen(false);
+              setReceiptViewerSrc("");
+            }}
+            sx={{ color: "#fff" }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 2.5, backgroundColor: "#f8fafc" }}>
+          {receiptViewerSrc && (
+            <Box
+              component="img"
+              src={receiptViewerSrc}
+              alt="Receipt large preview"
+              sx={{
+                width: "100%",
+                maxHeight: "75vh",
+                objectFit: "contain",
+                borderRadius: 2,
+                backgroundColor: "#fff",
+                border: "1px solid #dbe4ee"
+              }}
+            />
+          )}
+        </DialogContent>
       </Dialog>
 
       <Dialog
@@ -5819,4 +6188,5 @@ function ClientList() {
 }
 
 export default ClientList;
+
 

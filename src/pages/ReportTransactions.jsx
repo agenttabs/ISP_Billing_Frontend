@@ -254,8 +254,9 @@ export default function ReportTransactions() {
               <TableHead>
                 <TableRow>
                     <TableCell>Transaction Date</TableCell>
-                    <TableCell>Transfer Date</TableCell>
-                    <TableCell>Created</TableCell>
+                      <TableCell>Receiver Last 4</TableCell>
+                      <TableCell>Transfer Date</TableCell>
+                      <TableCell>Created</TableCell>
                     <TableCell>Account Name</TableCell>
                     <TableCell>Client Name</TableCell>
                     <TableCell>Invoice</TableCell>
@@ -266,7 +267,7 @@ export default function ReportTransactions() {
               <TableBody>
                 {shouldWaitForAdminDateRange ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={9} align="center">
                       Select a date range to view earnings.
                     </TableCell>
                   </TableRow>
@@ -284,8 +285,9 @@ export default function ReportTransactions() {
                           ? new Date(row.TransactionDate).toLocaleString("en-PH")
                           : "-"}
                       </TableCell>
-                      <TableCell>{row.TransferDate || row.GCashTransferDate || "-"}</TableCell>
-                      <TableCell>{row.DeclaredBy || row.CreatedBy || row.CreatedById || "-"}</TableCell>
+                      <TableCell>{row.ReceiverLast4 || row.GCashReceiverLast4 || "-"}</TableCell>
+                        <TableCell>{row.TransferDate || row.GCashTransferDate || "-"}</TableCell>
+                        <TableCell>{row.DeclaredBy || row.CreatedBy || row.CreatedById || "-"}</TableCell>
                       <TableCell>{row.AccountName || "-"}</TableCell>
                       <TableCell>{row.Item || row.ClientName || "-"}</TableCell>
                       <TableCell>{row.Invoice || "-"}</TableCell>
