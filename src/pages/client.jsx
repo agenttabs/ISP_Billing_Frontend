@@ -277,6 +277,9 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
   ].filter(Boolean);
 
   for (const candidate of candidateNames) {
+    let createdEarningId = null;
+    let createdTransactionId = null;
+
     try {
       const printer = await qz.printers.find(candidate);
       if (printer) {
@@ -1886,14 +1889,30 @@ function ClientList() {
   };
 
   const extractReferenceNumber = (text) => {
-    const cleaned = text.replace(/\r/g, " ").replace(/\n/g, " ");
-    const labelMatch = cleaned.match(
-      /(reference(?:\s*number)?|ref(?:\s*no\.?)?|rrn|trace(?:\s*no\.?)?)\s*[:#-]?\s*([A-Z0-9\s-]{6,40})/i
-    );
+    const raw = String(text || "");
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    const cleaned = raw.replace(/\r/g, " ").replace(/\n/g, " ");
 
-    if (labelMatch?.[2]) {
-      const tail = String(labelMatch[2]).trim();
-      const digitGroups = tail.match(/\d[\d\s-]{5,30}/g) || [];
+    const stripDateTimeTail = (value) =>
+      String(value || "")
+        .replace(
+          /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*$/i,
+          ""
+        )
+        .replace(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\b.*$/i, "")
+        .replace(/\b(?:AM|PM)\b.*$/i, "")
+        .trim();
+
+    const extractDigitsFromChunk = (chunk) => {
+      const chunkText = String(chunk || "").trim();
+      if (!chunkText) {
+        return "";
+      }
+
+      const digitGroups = chunkText.match(/\d[\d\s-]{5,30}/g) || [];
 
       for (const group of digitGroups) {
         const candidate = group.replace(/[^\d]/g, "").trim();
@@ -1906,13 +1925,83 @@ function ClientList() {
         }
       }
 
-      const compactCandidate = tail.replace(/[^A-Z0-9]/gi, "").trim();
+      const compactCandidate = chunkText.replace(/[^A-Z0-9]/gi, "").trim();
       if (
         compactCandidate.length >= 6 &&
         /\d/.test(compactCandidate) &&
         !looksLikeDateOrTimeReference(compactCandidate)
       ) {
         return compactCandidate;
+      }
+
+      return "";
+    };
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const currentLine = lines[index];
+
+      if (!/(reference(?:\s*number)?|ref(?:\s*no\.?)?|rrn|trace(?:\s*no\.?)?)/i.test(currentLine)) {
+        continue;
+      }
+
+      const currentLineWithoutLabel = currentLine.replace(
+        /(reference(?:\s*number)?|ref(?:\s*no\.?)?|rrn|trace(?:\s*no\.?)?)\s*[:#-]?\s*/i,
+        ""
+      );
+      const splitReferenceParts = [stripDateTimeTail(currentLineWithoutLabel)];
+
+      for (let offset = 1; offset <= 2; offset += 1) {
+        const nextLine = String(lines[index + offset] || "").trim();
+        if (!nextLine) {
+          continue;
+        }
+
+        const nextDigitsOnly = stripDateTimeTail(nextLine);
+
+        if (
+          /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(nextLine) ||
+          /\b\d{1,2}:\d{2}\b/.test(nextLine)
+        ) {
+          break;
+        }
+
+        if (/^[\d\s-]{3,}$/.test(nextDigitsOnly)) {
+          splitReferenceParts.push(nextDigitsOnly);
+          continue;
+        }
+
+        break;
+      }
+
+      const splitReferenceCandidate = extractDigitsFromChunk(
+        splitReferenceParts.join(" ")
+      );
+      if (splitReferenceCandidate) {
+        return splitReferenceCandidate;
+      }
+
+      const nearbyChunk = [
+        currentLine,
+        lines[index + 1] || "",
+        lines[index + 2] || ""
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const lineCandidate = extractDigitsFromChunk(nearbyChunk);
+      if (lineCandidate) {
+        return lineCandidate;
+      }
+    }
+
+    const labelMatch = cleaned.match(
+      /(reference(?:\s*number)?|ref(?:\s*no\.?)?|rrn|trace(?:\s*no\.?)?)\s*[:#-]?\s*([A-Z0-9\s-]{6,40})/i
+    );
+
+    if (labelMatch?.[2]) {
+      const labelCandidate = extractDigitsFromChunk(labelMatch[2]);
+      if (labelCandidate) {
+        return labelCandidate;
       }
     }
 
@@ -1941,6 +2030,14 @@ function ClientList() {
 
   const extractAmount = (text) => {
     const cleaned = text.replace(/,/g, "");
+    const transferAmountMatch = cleaned.match(
+      /(transfer\s*amount|total\s*amount)\s*[:#-]?\s*(php|₱)?\s*([0-9]+(?:\.[0-9]{2})?)/i
+    );
+
+    if (transferAmountMatch?.[3]) {
+      return transferAmountMatch[3];
+    }
+
     const labeledMatch = cleaned.match(
       /(amount|total|paid|payment)\s*[:#-]?\s*(php|₱)?\s*([0-9]+(?:\.[0-9]{2})?)/i
     );
@@ -1958,22 +2055,56 @@ function ClientList() {
     return moneyMatches[0] || "";
   };
 
-    const extractTransferDate = (text) => {
-    const cleaned = String(text || "").replace(/\r/g, " ").replace(/\n/g, " ");
-    const monthNameMatch = cleaned.match(
-      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
-    );
+  const extractTransferDate = (text) => {
+    const raw = String(text || "");
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => String(line || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    const cleaned = raw.replace(/\r/g, " ").replace(/\n/g, " ");
 
+    const monthDateTimePattern =
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
+    const monthDateTimeWithoutMeridiemPattern =
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\b/i;
+    const slashDateTimePattern =
+      /\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
+    const slashDateTimeWithoutMeridiemPattern =
+      /\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\b/i;
+
+    const monthNameMatch = cleaned.match(monthDateTimePattern);
     if (monthNameMatch?.[0]) {
       return String(monthNameMatch[0]).replace(/\s+/g, " ").trim();
     }
 
-    const slashDateTimeMatch = cleaned.match(
-      /\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i
-    );
-
+    const slashDateTimeMatch = cleaned.match(slashDateTimePattern);
     if (slashDateTimeMatch?.[0]) {
       return String(slashDateTimeMatch[0]).replace(/\s+/g, " ").trim();
+    }
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const currentLine = lines[index];
+      const nextLine = String(lines[index + 1] || "").trim();
+
+      const monthNoMeridiemMatch = currentLine.match(monthDateTimeWithoutMeridiemPattern);
+      if (monthNoMeridiemMatch?.[0]) {
+        if (/^(AM|PM)$/i.test(nextLine)) {
+          return `${String(monthNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.toUpperCase()}`;
+        }
+        if (/\b(?:AM|PM)\b/i.test(nextLine)) {
+          return `${String(monthNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.match(/\b(?:AM|PM)\b/i)[0].toUpperCase()}`;
+        }
+      }
+
+      const slashNoMeridiemMatch = currentLine.match(slashDateTimeWithoutMeridiemPattern);
+      if (slashNoMeridiemMatch?.[0]) {
+        if (/^(AM|PM)$/i.test(nextLine)) {
+          return `${String(slashNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.toUpperCase()}`;
+        }
+        if (/\b(?:AM|PM)\b/i.test(nextLine)) {
+          return `${String(slashNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.match(/\b(?:AM|PM)\b/i)[0].toUpperCase()}`;
+        }
+      }
     }
 
     return "";
@@ -2012,6 +2143,22 @@ function ClientList() {
   const detectPaymentMethodFromText = (text) => {
     const normalized = text.toLowerCase();
 
+    if (
+      (normalized.includes("maribank") || normalized.includes("transfer result")) &&
+      (normalized.includes("g-xchange") || normalized.includes("gcash"))
+    ) {
+      return "GCASH";
+    }
+
+    if (
+      normalized.includes("maribank") ||
+      normalized.includes("instapay") ||
+      normalized.includes("transfer result") ||
+      normalized.includes("transfer successful")
+    ) {
+      return "BANK";
+    }
+
     if (normalized.includes("gcash")) {
       return "GCASH";
     }
@@ -2044,9 +2191,29 @@ function ClientList() {
       const extractedRef = extractReferenceNumber(ocrText);
       const extractedAmount = extractAmount(ocrText);
       const extractedTransferDate = extractTransferDate(ocrText);
-        const extractedReceiverLast4 = extractReceiverLast4(ocrText);
-        const detectedMethod = detectPaymentMethodFromText(ocrText);
+      const detectedMethod = detectPaymentMethodFromText(ocrText);
+      const extractedReceiverLast4 =
+        /maribank|instapay|transfer result/i.test(String(ocrText || ""))
+          ? ""
+          : extractReceiverLast4(ocrText);
       const normalizedExtractedRef = String(extractedRef || "").trim().toUpperCase();
+      const normalizedExtractedAmount = String(extractedAmount || "").trim();
+
+      if (!normalizedExtractedAmount || Number(normalizedExtractedAmount) <= 0) {
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        setReceiptPreview("");
+        setReceiptPreviewOpen(false);
+        setOcrLoading(false);
+        setOcrMessage("No amount detected from the receipt image.");
+        showMessage(
+          "Receipt Amount Required",
+          "Unable to detect the payment amount from the uploaded receipt. Please use a clearer image or enter it manually.",
+          "warning"
+        );
+        return;
+      }
 
       if (
         detectedMethod !== "CASH" &&
@@ -2957,6 +3124,8 @@ function ClientList() {
         normalizedPaymentEntries.find(
           (entry) => entry.method !== "CASH" && String(entry.receiverLast4 || "").trim()
         )?.receiverLast4 || "";
+    let createdEarningId = null;
+    let createdTransactionId = null;
 
     if (!selectedClient?._id) {
       showMessage("No Client Selected", "Please select a client first.", "warning");
@@ -3187,11 +3356,14 @@ function ClientList() {
         updatedAt: transactionDateTime
       };
 
-      await API.post("/earnings", earningPayload);
-      await API.post(
+      const earningResponse = await API.post("/earnings", earningPayload);
+      createdEarningId = earningResponse?.data?._id || null;
+
+      const transactionResponse = await API.post(
         "/transactions",
         transactionPayload
       );
+      createdTransactionId = transactionResponse?.data?._id || null;
 
       await API.put(
         `/clients/${selectedClient._id}`,
@@ -3318,7 +3490,28 @@ function ClientList() {
       }
     } catch (err) {
       console.error("PAYMENT ERROR:", err.response?.data || err.message);
-      showMessage("Payment Failed", "Failed to save payment.", "error");
+
+      if (createdEarningId || createdTransactionId) {
+        try {
+          await API.post("/payments/rollback", {
+            earningId: createdEarningId,
+            transactionId: createdTransactionId,
+            AccountName: selectedClient?.AccountName || ""
+          });
+        } catch (rollbackErr) {
+          console.error(
+            "PAYMENT ROLLBACK ERROR:",
+            rollbackErr.response?.data || rollbackErr.message
+          );
+        }
+      }
+
+      const serverMessage =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        "Failed to save payment.";
+
+      showMessage("Payment Failed", serverMessage, "error");
     }
   };
 

@@ -3,8 +3,8 @@ import axios from "axios";
 import API from "../api/api";
 
 const AuthContext = createContext();
-const initialToken = localStorage.getItem("token");
-const initialUserRaw = localStorage.getItem("user");
+const initialToken = sessionStorage.getItem("token");
+const initialUserRaw = sessionStorage.getItem("user");
 const initialUser = initialUserRaw ? JSON.parse(initialUserRaw) : null;
 
 if (initialToken) {
@@ -24,8 +24,8 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      sessionStorage.setItem("token", data.token);
+      sessionStorage.setItem("user", JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
       return { success: true, user: data.user };
@@ -39,8 +39,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = (redirectToLogin = false) => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("user");
     delete axios.defaults.headers.common.Authorization;
     setToken(null);
     setUser(null);
@@ -129,3 +129,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

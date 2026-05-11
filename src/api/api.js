@@ -16,7 +16,7 @@ const API = axios.create({
 
 // attach token automatically
 API.interceptors.request.use((req) => {
-  const token = localStorage.getItem("token");
+  const token = sessionStorage.getItem("token");
 
   if (token) {
     req.headers.Authorization = `Bearer ${token}`;
@@ -27,3 +27,4 @@ API.interceptors.request.use((req) => {
 
 export { API_BASE_URL, SOCKET_BASE_URL };
 export default API;
+

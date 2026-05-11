@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -295,11 +295,17 @@ export default function ReportTransactions() {
                       <TableCell>{formatMoney(row.Cash || row.TotalAmount)}</TableCell>
                       <TableCell>{row.MOP || row.Type || "-"}</TableCell>
                       <TableCell>
-                        {String(row.MOP || row.Type || "").trim().toUpperCase() === "CASH"
-                          ? "-"
-                          : row.Verified
-                            ? "VALIDATED"
-                            : "PENDING"}
+                        {String(row.MOP || row.Type || "").trim().toUpperCase() === "CASH" ? (
+                          "-"
+                        ) : row.Verified ? (
+                          <Box component="span" sx={{ fontWeight: 800, color: "success.main", letterSpacing: 0.3 }}>
+                            VALIDATED
+                          </Box>
+                        ) : (
+                          <Box component="span" sx={{ fontWeight: 700, color: "warning.main", letterSpacing: 0.2 }}>
+                            PENDING
+                          </Box>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -312,4 +318,5 @@ export default function ReportTransactions() {
     </Box>
   );
 }
+
 
