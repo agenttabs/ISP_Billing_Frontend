@@ -1300,7 +1300,7 @@ function ClientList() {
         (
           isDisconnectedPlan(selectedClient) ||
           Boolean(paymentForm.ReconnectRequired) ||
-          selectedClientOverdueDays >= 15
+          selectedClientOverdueDays > 15
         );
       const paymentNeedsDhcp =
         openPaymentModal &&
@@ -1653,6 +1653,9 @@ function ClientList() {
     return Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
   };
 
+  const getDaysPastDisconnectionThreshold = (client, threshold = 15) =>
+    Math.max(0, getClientOverdueDays(client) - threshold);
+
   const openPaymentModalForClient = async (client, options = {}) => {
     const paymentDate = getTodayLocalDate();
     const reconnectAuthMode = getNormalizedAuthMode(
@@ -1702,7 +1705,7 @@ function ClientList() {
       return;
     }
 
-    if (overdueDays >= 15) {
+    if (overdueDays > 15) {
       setOverdueDialog({
         open: true,
         client
@@ -3045,7 +3048,7 @@ function ClientList() {
       (
         isDisconnectedPlan(selectedClient) ||
         Boolean(paymentForm.ReconnectRequired) ||
-        paymentOverdueDays >= 15
+        paymentOverdueDays > 15
       );
   const rawPlanAmount = Number(selectedClient?.AmountDue ?? 0);
   const planAmount = paymentRequiresReconnectFlow
@@ -7030,7 +7033,7 @@ function ClientList() {
 
         <DialogContent sx={{ p: 3 }}>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This client is already 15 or more days overdue.
+            This client is already {getDaysPastDisconnectionThreshold(overdueDialog.client)} day(s) past the 15-day disconnection threshold.
           </Alert>
 
           <Typography sx={{ mb: 2, color: "#334155" }}>
@@ -7089,7 +7092,7 @@ function ClientList() {
 
         <DialogContent sx={{ p: 3 }}>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This client is already disconnected.
+            This client is already {getDaysPastDisconnectionThreshold(forcedOverdueDialog.client)} day(s) past the 15-day disconnection threshold.
           </Alert>
 
           <Typography sx={{ color: "#334155" }}>
