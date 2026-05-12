@@ -38,7 +38,7 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io } from "socket.io-client";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import CloseIcon from "@mui/icons-material/Close";
@@ -277,9 +277,6 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
   ].filter(Boolean);
 
   for (const candidate of candidateNames) {
-    let createdEarningId = null;
-    let createdTransactionId = null;
-
     try {
       const printer = await qz.printers.find(candidate);
       if (printer) {
@@ -981,7 +978,16 @@ const getStatusChipStyles = (status) => {
 
 function ClientList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id: clientRouteId } = useParams();
   const { clients, clientMeta, fetchClients, addClient, loading } = useClient();
+
+  const isClientAddPage = location.pathname === "/clients/new";
+  const isClientEditPage =
+    Boolean(clientRouteId) &&
+    (location.pathname === `/clients/${clientRouteId}/edit` ||
+      location.pathname === `/editclient/${clientRouteId}`);
+  const isClientFormPage = isClientAddPage || isClientEditPage;
 
   const currentUser = JSON.parse(localStorage.getItem("user") || "null");
   const currentUserType = String(
@@ -1061,6 +1067,7 @@ function ClientList() {
   const [paymentHistoryRows, setPaymentHistoryRows] = useState([]);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
   const [paymentHistoryError, setPaymentHistoryError] = useState("");
+  const [expandedPaymentHistoryRowId, setExpandedPaymentHistoryRowId] = useState("");
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
   const [billingHistoryRows, setBillingHistoryRows] = useState([]);
@@ -1076,6 +1083,20 @@ function ClientList() {
     value: null,
     row: null
   });
+  const mapClientToForm = useCallback((client) => ({
+    ...getDefaultNewClientForm(),
+    ...client,
+    MacAddress: client?.MacAddress || client?.macAddress || "",
+    AmountDue: client?.AmountDue ?? "",
+    DueDate: client?.DueDate ? formatDateToMMDDYYYY(client.DueDate) : "",
+    SubscriptionCover: client?.DueDate
+      ? String(new Date(client.DueDate).getDate())
+      : client?.SubscriptionCover || ""
+  }), []);
+
+  const navigateToClientList = useCallback(() => {
+    navigate("/clients");
+  }, [navigate]);
   const loadClients = useCallback(() => {
     return fetchClients({
       status: statusFilter,
@@ -1139,8 +1160,63 @@ function ClientList() {
   };
 
   useEffect(() => {
+    if (isClientFormPage) {
+      return;
+    }
+
     loadClients();
-  }, [loadClients]);
+  }, [isClientFormPage, loadClients]);
+
+  useEffect(() => {
+    if (isClientAddPage) {
+      setOpenModal(false);
+      setEditMode(false);
+      setSelectedClient(null);
+      setNewClient(getDefaultNewClientForm());
+      return;
+    }
+
+    if (!isClientEditPage || !clientRouteId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadClientForEdit = async () => {
+      try {
+        const { data } = await API.get(`/clients/${clientRouteId}`);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setOpenModal(false);
+        setEditMode(true);
+        setSelectedClient(data || null);
+        setNewClient(mapClientToForm(data || {}));
+      } catch (err) {
+        console.error("LOAD CLIENT ERROR:", err.response?.data || err.message);
+        showMessage(
+          "Client Load Failed",
+          err.response?.data?.error || "Failed to load client details.",
+          "error"
+        );
+        navigateToClientList();
+      }
+    };
+
+    loadClientForEdit();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    clientRouteId,
+    isClientAddPage,
+    isClientEditPage,
+    mapClientToForm,
+    navigateToClientList
+  ]);
 
   useEffect(() => {
     API
@@ -1233,7 +1309,10 @@ function ClientList() {
         ) === "IPOE" &&
       paymentNeedsReconnectFlow;
 
-    if ((!openModal || newClient.AuthenticationMode !== "IPOE") && !paymentNeedsDhcp) {
+    const shouldLoadClientDhcp =
+      (openModal || isClientFormPage) && newClient.AuthenticationMode === "IPOE";
+
+    if (!shouldLoadClientDhcp && !paymentNeedsDhcp) {
       setDhcpLeaseOptions([]);
       setLoadingDhcpLeases(false);
       return;
@@ -1276,6 +1355,7 @@ function ClientList() {
   }, [
     newClient.AuthenticationMode,
     dhcpLeaseComments,
+    isClientFormPage,
     openModal,
     openPaymentModal,
     paymentForm.ReconnectAuthMode,
@@ -1457,20 +1537,12 @@ function ClientList() {
     clientMapLongitude !== "" &&
     Number.isFinite(Number(clientMapLatitude)) &&
     Number.isFinite(Number(clientMapLongitude));
-  const clientMapAddress = String(
-    newClient.Address || selectedClient?.Address || ""
-  ).trim();
-  const encodedClientMapAddress = encodeURIComponent(clientMapAddress);
   const clientMapEmbedUrl = hasClientMapCoordinates
     ? `https://maps.google.com/maps?q=${encodeURIComponent(`${clientMapLatitude},${clientMapLongitude}`)}&z=17&output=embed`
-    : clientMapAddress
-      ? `https://maps.google.com/maps?q=${encodedClientMapAddress}&z=15&output=embed`
-      : "";
+    : "";
   const clientMapOpenUrl = hasClientMapCoordinates
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${clientMapLatitude},${clientMapLongitude}`)}`
-    : clientMapAddress
-      ? `https://www.google.com/maps/search/?api=1&query=${encodedClientMapAddress}`
-      : "";
+    : "";
   const mikrotikStatusRxBytes = Number(mikrotikStatusData?.rxBytes || 0);
   const mikrotikStatusTxBytes = Number(mikrotikStatusData?.txBytes || 0);
   const mikrotikTrafficPeak = Math.max(
@@ -1659,6 +1731,7 @@ function ClientList() {
       });
 
       setPaymentHistoryRows(rows);
+      setExpandedPaymentHistoryRowId("");
     } catch (err) {
       console.error("PAYMENT HISTORY ERROR:", err.response?.data || err.message);
       setPaymentHistoryError(
@@ -1698,6 +1771,7 @@ function ClientList() {
     setPaymentHistoryRows([]);
     setPaymentHistoryError("");
     setPaymentHistoryLoading(false);
+    setExpandedPaymentHistoryRowId("");
   };
 
   const handleOpenMikrotikStatusModal = async (client) => {
@@ -1896,6 +1970,22 @@ function ClientList() {
       .filter(Boolean);
     const cleaned = raw.replace(/\r/g, " ").replace(/\n/g, " ");
 
+    const traceIdMatch = cleaned.match(
+      /\btrace\s*id\s*[:#-]?\s*([A-Z0-9\s-]{4,30})/i
+    );
+    if (traceIdMatch?.[1]) {
+      const traceCandidate = String(traceIdMatch[1])
+        .replace(/[^A-Z0-9]/gi, "")
+        .trim();
+      if (
+        traceCandidate.length >= 4 &&
+        /\d/.test(traceCandidate) &&
+        !looksLikeDateOrTimeReference(traceCandidate)
+      ) {
+        return traceCandidate;
+      }
+    }
+
     const stripDateTimeTail = (value) =>
       String(value || "")
         .replace(
@@ -2065,8 +2155,12 @@ function ClientList() {
 
     const monthDateTimePattern =
       /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
+    const dayFirstMonthDateTimePattern =
+      /\b\d{1,2}\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}(?:\s+at)?\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
     const monthDateTimeWithoutMeridiemPattern =
       /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\b/i;
+    const dayFirstMonthDateTimeWithoutMeridiemPattern =
+      /\b\d{1,2}\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}(?:\s+at)?\s+\d{1,2}:\d{2}\b/i;
     const slashDateTimePattern =
       /\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
     const slashDateTimeWithoutMeridiemPattern =
@@ -2075,6 +2169,11 @@ function ClientList() {
     const monthNameMatch = cleaned.match(monthDateTimePattern);
     if (monthNameMatch?.[0]) {
       return String(monthNameMatch[0]).replace(/\s+/g, " ").trim();
+    }
+
+    const dayFirstMonthMatch = cleaned.match(dayFirstMonthDateTimePattern);
+    if (dayFirstMonthMatch?.[0]) {
+      return String(dayFirstMonthMatch[0]).replace(/\s+/g, " ").trim();
     }
 
     const slashDateTimeMatch = cleaned.match(slashDateTimePattern);
@@ -2093,6 +2192,16 @@ function ClientList() {
         }
         if (/\b(?:AM|PM)\b/i.test(nextLine)) {
           return `${String(monthNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.match(/\b(?:AM|PM)\b/i)[0].toUpperCase()}`;
+        }
+      }
+
+      const dayFirstMonthNoMeridiemMatch = currentLine.match(dayFirstMonthDateTimeWithoutMeridiemPattern);
+      if (dayFirstMonthNoMeridiemMatch?.[0]) {
+        if (/^(AM|PM)$/i.test(nextLine)) {
+          return `${String(dayFirstMonthNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.toUpperCase()}`;
+        }
+        if (/\b(?:AM|PM)\b/i.test(nextLine)) {
+          return `${String(dayFirstMonthNoMeridiemMatch[0]).replace(/\s+/g, " ").trim()} ${nextLine.match(/\b(?:AM|PM)\b/i)[0].toUpperCase()}`;
         }
       }
 
@@ -2797,6 +2906,14 @@ function ClientList() {
   const handleCloseModal = (event, reason) => {
     if (reason === "backdropClick") return;
 
+    if (isClientFormPage) {
+      setEditMode(false);
+      setSelectedClient(null);
+      resetForm();
+      navigateToClientList();
+      return;
+    }
+
     setOpenModal(false);
     setEditMode(false);
     resetForm();
@@ -2966,7 +3083,7 @@ function ClientList() {
     uniquePaymentMethods.length === 1
       ? uniquePaymentMethods[0]
       : normalizedPaymentEntries.length > 1
-        ? "MULTIPLE"
+        ? uniquePaymentMethods.join("/")
         : "CASH";
   const topLevelPaymentReference =
     uniqueNonCashReferences.length === 1
@@ -3124,7 +3241,7 @@ function ClientList() {
         normalizedPaymentEntries.find(
           (entry) => entry.method !== "CASH" && String(entry.receiverLast4 || "").trim()
         )?.receiverLast4 || "";
-    let createdEarningId = null;
+    let createdEarningIds = [];
     let createdTransactionId = null;
 
     if (!selectedClient?._id) {
@@ -3289,24 +3406,11 @@ function ClientList() {
           currentUser?.name || currentUser?.username || currentUser?.Name || "";
         const createdById = currentUser?.id || currentUser?._id || currentUser?.ID || null;
 
-      const earningPayload = {
-        AccountName: selectedClient.AccountName || "",
-        Invoice: salesInvoiceNumber,
-        Item: "ISP-Client Payment",
-        MOP: topLevelPaymentMethod,
-        MOPRef: topLevelPaymentReference,
-        Cash: amountPaid,
-        CashAmount: cashPaymentAmount,
-        GCashAmount: gcashPaymentAmount,
-        PaymentBreakdown: paymentBreakdown,
-          TransferDate: topLevelTransferDate,
-          GCashTransferDate: topLevelTransferDate,
-          ReceiverLast4: topLevelReceiverLast4,
-          GCashReceiverLast4: topLevelReceiverLast4,
-        DeclaredBy: createdByName || createdById,
-        DeclaredById: createdById,
-        TransactionDate: transactionDateTime
-      };
+      const transactionMonthLabel = transactionDateTime.toLocaleString("en-US", {
+        month: "long"
+      });
+      const transactionDayValue = String(transactionDateTime.getDate()).padStart(2, "0");
+      const transactionYearValue = String(transactionDateTime.getFullYear());
 
       const transactionPayload = {
         ClientId: selectedClient._id,
@@ -3329,7 +3433,6 @@ function ClientList() {
         Verified: false,
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
-        PaymentBreakdown: paymentBreakdown,
         Invoice: salesInvoiceNumber,
         PaymentReceipt: paymentReceiptNumber,
         TransactionCode: paymentReceiptNumber,
@@ -3356,14 +3459,55 @@ function ClientList() {
         updatedAt: transactionDateTime
       };
 
-      const earningResponse = await API.post("/earnings", earningPayload);
-      createdEarningId = earningResponse?.data?._id || null;
-
       const transactionResponse = await API.post(
         "/transactions",
         transactionPayload
       );
       createdTransactionId = transactionResponse?.data?._id || null;
+
+      const earningResponses = await Promise.all(
+        normalizedPaymentEntries.map((entry) =>
+          API.post("/earnings", {
+            PrintId: createdTransactionId,
+            AccountName: selectedClient.AccountName || "",
+            AccountNumber: selectedClient.AccountNumber || "",
+            ClientName: selectedClient.ClientName || "",
+            Invoice: salesInvoiceNumber,
+            PaymentReceipt: paymentReceiptNumber,
+            Item: "ISP-Client Payment",
+            MOP: entry.method,
+            MOPRef: entry.method === "CASH" ? "" : entry.reference,
+            Cash: entry.amount,
+            CashAmount: entry.method === "CASH" ? entry.amount : 0,
+            GCashAmount: entry.method === "GCASH" ? entry.amount : 0,
+            ReceiptAmount:
+              entry.method === "CASH"
+                ? entry.amount
+                : Number(entry.receiptAmount || entry.amount || 0),
+            TransferDate: entry.method === "CASH" ? "" : String(entry.transferDate || "").trim(),
+            GCashTransferDate:
+              entry.method === "GCASH" ? String(entry.transferDate || "").trim() : "",
+            ReceiverLast4: entry.method === "CASH" ? "" : String(entry.receiverLast4 || "").trim(),
+            GCashReceiverLast4:
+              entry.method === "GCASH" ? String(entry.receiverLast4 || "").trim() : "",
+            DeclaredBy: createdByName || createdById,
+            DeclaredById: createdById,
+            TransactionDate: transactionDateTime,
+            PaymentDate: paymentForm.PaymentDate,
+            Month: transactionMonthLabel,
+            Day: transactionDayValue,
+            Year: transactionYearValue,
+            Quantity: "1",
+            Expenses: "0",
+            SupplierPrice: "0",
+            createdAt: transactionDateTime,
+            updatedAt: transactionDateTime
+          })
+        )
+      );
+      createdEarningIds = earningResponses
+        .map((response) => response?.data?._id)
+        .filter(Boolean);
 
       await API.put(
         `/clients/${selectedClient._id}`,
@@ -3396,7 +3540,6 @@ function ClientList() {
           AmountPaid: amountPaid,
           CashAmount: cashPaymentAmount,
           GCashAmount: gcashPaymentAmount,
-          PaymentBreakdown: paymentBreakdown,
           Balance: balance,
           PaymentDate: paymentForm.PaymentDate,
           PaymentMethod: topLevelPaymentMethod,
@@ -3491,10 +3634,10 @@ function ClientList() {
     } catch (err) {
       console.error("PAYMENT ERROR:", err.response?.data || err.message);
 
-      if (createdEarningId || createdTransactionId) {
+      if (createdEarningIds.length || createdTransactionId) {
         try {
           await API.post("/payments/rollback", {
-            earningId: createdEarningId,
+            earningIds: createdEarningIds,
             transactionId: createdTransactionId,
             AccountName: selectedClient?.AccountName || ""
           });
@@ -3514,6 +3657,538 @@ function ClientList() {
       showMessage("Payment Failed", serverMessage, "error");
     }
   };
+
+  const renderClientFormFields = () => (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", xl: "1.18fr 0.82fr" },
+        gap: 1.5
+      }}
+    >
+      <Paper elevation={0} sx={formSectionSx}>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
+          Basic Information
+        </Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.25 }}>
+          <TextField
+            label="Client Name"
+            name="ClientName"
+            fullWidth
+            value={newClient.ClientName || ""}
+            onChange={handleChange}
+          />
+
+          <TextField
+            label="Account Name"
+            name="AccountName"
+            fullWidth
+            value={newClient.AccountName || ""}
+            onChange={handleChange}
+          />
+        </Box>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1, mt: 1.25 }}>
+          <TextField
+            label="Password"
+            name="Password"
+            fullWidth
+            value={newClient.Password || ""}
+            InputProps={{ readOnly: true }}
+          />
+
+          <Button
+            variant="outlined"
+            onClick={generatePassword}
+            disabled={selectedAuthMode === "IPOE"}
+            sx={{ px: 2, borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+          >
+            Generate
+          </Button>
+        </Box>
+      </Paper>
+
+      <Paper elevation={0} sx={formSectionSx}>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
+          Network Setup
+        </Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" }, gap: 1.25 }}>
+          <TextField
+            select
+            label="Authentication"
+            name="AuthenticationMode"
+            fullWidth
+            value={newClient.AuthenticationMode || ""}
+            onChange={handleChange}
+          >
+            <MenuItem value="PPPOE">PPPOE</MenuItem>
+            <MenuItem value="IPOE">IPOE</MenuItem>
+          </TextField>
+
+          <TextField
+            select
+            label="MAC Address"
+            name="MacAddress"
+            fullWidth
+            value={newClient.MacAddress || ""}
+            onChange={handleChange}
+            disabled={selectedAuthMode === "PPPOE"}
+            helperText={
+              selectedAuthMode === "IPOE"
+                ? loadingDhcpLeases
+                  ? "Loading DHCP leases from MikroTik..."
+                  : "Showing DHCP leases with no comment"
+                : "Enable IPOE to select a MAC address"
+            }
+          >
+            {displayedDhcpLeaseOptions.map((mac) => (
+              <MenuItem key={mac} value={mac}>
+                {mac}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select
+            label="Profile"
+            name="Profile"
+            fullWidth
+            value={newClient.Profile || ""}
+            onChange={handleChange}
+            helperText={
+              selectedAuthMode
+                ? `Showing ${selectedAuthMode} plans only`
+                : "Select authentication first"
+            }
+          >
+            {filteredNetPlans.map((plan) => (
+              <MenuItem key={plan._id} value={getPlanName(plan)}>
+                {getPlanName(plan)}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
+
+        <Box
+          sx={{
+            mt: 1.2,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap"
+          }}
+        >
+          <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
+            Status Modem
+          </Typography>
+          <Chip
+            label={modalModemStatus}
+            size="small"
+            sx={{
+              borderRadius: "999px",
+              backgroundColor:
+                modalModemStatus === "ACTIVE"
+                  ? "#e8f5e9"
+                  : modalModemStatus === "HOLD"
+                    ? "#fff7ed"
+                    : modalModemStatus === "NOT ACTIVE"
+                      ? "#fee2e2"
+                      : modalModemStatus === "NO MAC FOUND"
+                        ? "#e5e7eb"
+                        : modalModemStatus === "DEACTIVE"
+                          ? "#fee2e2"
+                          : "#f1f5f9",
+              color:
+                modalModemStatus === "ACTIVE"
+                  ? "#2e7d32"
+                  : modalModemStatus === "HOLD"
+                    ? "#c2410c"
+                    : modalModemStatus === "NOT ACTIVE"
+                      ? "#b91c1c"
+                      : modalModemStatus === "NO MAC FOUND"
+                        ? "#374151"
+                        : modalModemStatus === "DEACTIVE"
+                          ? "#b91c1c"
+                          : "#475569",
+              fontWeight: 700,
+              px: 0.5
+            }}
+          />
+          {modalIsIpoeClient && (modalLeaseMacAddress || modalLeaseIpAddress) ? (
+            <Typography sx={{ fontSize: "10px", color: "#64748b" }}>
+              {modalLeaseMacAddress ? `MAC: ${modalLeaseMacAddress}` : ""}
+              {modalLeaseMacAddress && modalLeaseIpAddress ? " | " : ""}
+              {modalLeaseIpAddress ? `IP: ${modalLeaseIpAddress}` : ""}
+            </Typography>
+          ) : null}
+        </Box>
+      </Paper>
+
+      <Paper elevation={0} sx={formSectionSx}>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
+          Contact Details
+        </Typography>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "2.4fr 0.8fr" },
+            gap: 1.25
+          }}
+        >
+          <TextField
+            label="Address"
+            name="Address"
+            fullWidth
+            value={newClient.Address || ""}
+            onChange={handleChange}
+          />
+
+          <TextField
+            label="Contact Number"
+            name="ContactNumber"
+            fullWidth
+            value={newClient.ContactNumber || ""}
+            onChange={handleChange}
+            inputProps={{ inputMode: "numeric", maxLength: 11 }}
+            sx={{ maxWidth: { xs: "100%", md: 190 } }}
+          />
+
+          <TextField
+            label="Latitude"
+            name="Latitude"
+            value={newClient.Latitude || ""}
+            onChange={handleChange}
+            placeholder="Example: 7.0731"
+            helperText="Optional map latitude"
+          />
+
+          <TextField
+            label="Longitude"
+            name="Longitude"
+            value={newClient.Longitude || ""}
+            onChange={handleChange}
+            placeholder="Example: 125.6128"
+            helperText="Optional map longitude"
+          />
+
+          {clientMapEmbedUrl ? (
+            <Box
+              sx={{
+                gridColumn: { xs: "1 / span 1", md: "1 / span 2" },
+                border: "1px solid #dbe4ee",
+                borderRadius: 2.5,
+                overflow: "hidden",
+                backgroundColor: "#fff"
+              }}
+            >
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 1.25,
+                  display: "flex",
+                  alignItems: { xs: "flex-start", md: "center" },
+                  justifyContent: "space-between",
+                  gap: 1.5,
+                  flexDirection: { xs: "column", md: "row" },
+                  borderBottom: "1px solid #e2e8f0"
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                    Client Map
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.82rem", color: "#64748b" }}>
+                    Preview based on the saved coordinates.
+                  </Typography>
+                </Box>
+                <Button
+                  component="a"
+                  href={clientMapOpenUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="small"
+                  variant="outlined"
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  Open in Google Maps
+                </Button>
+              </Box>
+
+              <Box sx={{ height: 240, backgroundColor: "#f8fafc" }}>
+                <Box
+                  component="iframe"
+                  title="Client location map"
+                  src={clientMapEmbedUrl}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  sx={{
+                    width: "100%",
+                    height: "100%",
+                    border: 0
+                  }}
+                />
+              </Box>
+
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 1.25,
+                  borderTop: "1px solid #e2e8f0"
+                }}
+              >
+                <Typography sx={{ fontSize: "0.82rem", color: "#64748b" }}>
+                  Map preview updates only from the saved coordinates.
+                </Typography>
+              </Box>
+            </Box>
+          ) : null}
+
+          <TextField
+            label="Email Address"
+            name="Email"
+            type="email"
+            fullWidth
+            value={newClient.Email || ""}
+            onChange={handleChange}
+            error={emailError}
+            helperText={emailError ? "Enter a valid email address" : " "}
+            sx={{ gridColumn: { xs: "1 / span 1", md: "1 / span 2" } }}
+          />
+
+          <Box
+            sx={{
+              gridColumn: { xs: "1 / span 1", md: "1 / span 2" },
+              px: 1.5,
+              py: 1.25,
+              border: "1px solid #dbe4ee",
+              borderRadius: 2,
+              backgroundColor: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}
+          >
+            <Box>
+              <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                Email Billing
+              </Typography>
+              <Typography sx={{ fontSize: "0.85rem", color: "#64748b" }}>
+                Turn this on only if the client want to receive the email.
+              </Typography>
+            </Box>
+            <Switch
+              name="EmailBillingEnabled"
+              checked={Boolean(newClient.EmailBillingEnabled)}
+              onChange={handleChange}
+              disabled={!canEnableEmailBilling}
+            />
+          </Box>
+        </Box>
+      </Paper>
+
+      <Paper elevation={0} sx={formSectionSx}>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
+          Plan Details
+        </Typography>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr" },
+            gap: 1.25
+          }}
+        >
+          <TextField
+            label="Net Plan"
+            value={newClient.NetPlan || ""}
+            fullWidth
+            InputProps={{ readOnly: true }}
+          />
+
+          <TextField
+            label="Amount Due"
+            value={newClient.AmountDue ?? ""}
+            fullWidth
+            InputProps={{ readOnly: true }}
+          />
+
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DatePicker
+              label="Due Date"
+              disabled={editMode || !isAdminUser}
+              value={
+                newClient.DueDate
+                  ? dayjs(parseMMDDYYYYToISO(newClient.DueDate))
+                  : null
+              }
+              onChange={(value) => {
+                if (!value) {
+                  setNewClient((prev) => ({
+                    ...prev,
+                    DueDate: "",
+                    SubscriptionCover: ""
+                  }));
+                  return;
+                }
+
+                const formatted = value.format("MM/DD/YYYY");
+
+                setNewClient((prev) => ({
+                  ...prev,
+                  DueDate: formatted,
+                  SubscriptionCover: String(value.date())
+                }));
+              }}
+              slotProps={{
+                textField: {
+                  fullWidth: true
+                }
+              }}
+            />
+          </LocalizationProvider>
+
+          <TextField
+            label="Subscription Cover"
+            name="SubscriptionCover"
+            fullWidth
+            value={newClient.SubscriptionCover || ""}
+            InputProps={{ readOnly: true }}
+          />
+        </Box>
+
+        <Box sx={{ mt: 1.25 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 1, color: "#0f172a" }}>
+            Notes
+          </Typography>
+          <TextField
+            label="Notes"
+            name="Note"
+            fullWidth
+            multiline
+            rows={4}
+            value={newClient.Note || ""}
+            onChange={handleChange}
+          />
+        </Box>
+      </Paper>
+    </Box>
+  );
+
+  const renderClientFormActions = () => (
+    <Box
+      sx={{
+        px: 2.25,
+        py: 1.5,
+        backgroundColor: "#f6f9fc",
+        borderTop: "1px solid #dbe4ee",
+        display: "flex",
+        justifyContent: "flex-end",
+        alignItems: "center",
+        gap: 1.25,
+        flexWrap: "wrap"
+      }}
+    >
+      <Button
+        onClick={handleCloseModal}
+        sx={{ textTransform: "none", fontWeight: 700 }}
+      >
+        Cancel
+      </Button>
+      {editMode && selectedAuthMode === "IPOE" ? (
+        <Button
+          variant="outlined"
+          color="warning"
+          onClick={handlePullOutClient}
+          sx={{
+            px: 2.5,
+            py: 0.8,
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: 700
+          }}
+        >
+          Pull OUT
+        </Button>
+      ) : null}
+      <Button
+        variant="contained"
+        onClick={editMode ? handleUpdateClient : handleAddClient}
+        sx={{
+          px: 3.25,
+          py: 0.85,
+          borderRadius: 2,
+          textTransform: "none",
+          fontWeight: 700,
+          boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
+        }}
+      >
+        Save Client
+      </Button>
+    </Box>
+  );
+
+  if (isClientFormPage) {
+    return (
+      <Box
+        sx={{
+          p: 3,
+          background: "linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%)",
+          minHeight: "100%"
+        }}
+      >
+        <PageHeader
+          title={editMode ? "Update Client" : "Add New Client"}
+          subtitle={
+            editMode
+              ? "Edit and save the selected client from one dedicated page."
+              : "Create and save a new client from one dedicated page."
+          }
+        />
+
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 4,
+            overflow: "hidden",
+            background: "#f6f9fc",
+            boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)"
+          }}
+        >
+          <Box
+            sx={{
+              background: "linear-gradient(90deg, #0f4c81, #2563eb)",
+              color: "#fff",
+              px: 3,
+              py: 1.6,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <PersonAddIcon />
+              <Typography sx={{ fontSize: "1rem", fontWeight: 700 }}>
+                {editMode ? "Update Client" : "Add New Client"}
+              </Typography>
+            </Box>
+
+            <IconButton onClick={handleCloseModal} sx={{ color: "#fff" }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+
+          <Box sx={{ p: 2.25, backgroundColor: "#f6f9fc" }}>
+            {renderClientFormFields()}
+          </Box>
+
+          {renderClientFormActions()}
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -3604,7 +4279,7 @@ function ClientList() {
         <Tooltip title="Add Client">
           <IconButton
             color="primary"
-            onClick={() => setOpenModal(true)}
+            onClick={() => navigate("/clients/new")}
             sx={{
               mb: 0.5,
               borderRadius: 2.5,
@@ -3780,20 +4455,7 @@ function ClientList() {
                     <Tooltip title="Update">
                       <IconButton
                         sx={{ "&:hover": { color: "#1976d2" } }}
-                        onClick={() => {
-                          setEditMode(true);
-                          setSelectedClient(c);
-                          setNewClient({
-                            ...c,
-                            MacAddress: c.MacAddress || c.macAddress || "",
-                            AmountDue: c.AmountDue ?? "",
-                            DueDate: c.DueDate ? formatDateToMMDDYYYY(c.DueDate) : "",
-                            SubscriptionCover: c.DueDate
-                              ? String(new Date(c.DueDate).getDate())
-                              : c.SubscriptionCover || ""
-                          });
-                          setOpenModal(true);
-                        }}
+                        onClick={() => navigate(`/clients/${c._id}/edit`)}
                       >
                         <EditIcon />
                       </IconButton>
@@ -4114,6 +4776,34 @@ function ClientList() {
                   onChange={handleChange}
                 />
 
+                <TextField
+                  label="Contact Number"
+                  name="ContactNumber"
+                  fullWidth
+                  value={newClient.ContactNumber || ""}
+                  onChange={handleChange}
+                  inputProps={{ inputMode: "numeric", maxLength: 11 }}
+                  sx={{ maxWidth: { xs: "100%", md: 190 } }}
+                />
+
+                <TextField
+                  label="Latitude"
+                  name="Latitude"
+                  value={newClient.Latitude || ""}
+                  onChange={handleChange}
+                  placeholder="Example: 7.0731"
+                  helperText="Optional map latitude"
+                />
+
+                <TextField
+                  label="Longitude"
+                  name="Longitude"
+                  value={newClient.Longitude || ""}
+                  onChange={handleChange}
+                  placeholder="Example: 125.6128"
+                  helperText="Optional map longitude"
+                />
+
                 {clientMapEmbedUrl ? (
                   <Box
                     sx={{
@@ -4175,42 +4865,16 @@ function ClientList() {
                     <Box
                       sx={{
                         px: 1.5,
-                        py: 1.5,
-                        borderTop: "1px solid #e2e8f0",
-                        display: "grid",
-                        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-                        gap: 1.25
+                        py: 1.25,
+                        borderTop: "1px solid #e2e8f0"
                       }}
                     >
-                      <TextField
-                        label="Latitude"
-                        name="Latitude"
-                        value={newClient.Latitude || ""}
-                        onChange={handleChange}
-                        placeholder="Example: 7.0731"
-                        helperText="Edit the map point by saving latitude."
-                      />
-                      <TextField
-                        label="Longitude"
-                        name="Longitude"
-                        value={newClient.Longitude || ""}
-                        onChange={handleChange}
-                        placeholder="Example: 125.6128"
-                        helperText="Edit the map point by saving longitude."
-                      />
+                      <Typography sx={{ fontSize: "0.82rem", color: "#64748b" }}>
+                        Map preview updates from the saved address or coordinates.
+                      </Typography>
                     </Box>
                   </Box>
                 ) : null}
-
-                <TextField
-                  label="Contact Number"
-                  name="ContactNumber"
-                  fullWidth
-                  value={newClient.ContactNumber || ""}
-                  onChange={handleChange}
-                  inputProps={{ inputMode: "numeric", maxLength: 11 }}
-                  sx={{ maxWidth: { xs: "100%", md: 190 } }}
-                />
 
                   <TextField
                     label="Email Address"
@@ -5906,8 +6570,25 @@ function ClientList() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paymentHistoryRows.map((row) => (
-                      <TableRow key={row._id || `${row.Invoice}-${row.TransactionDate}`}>
+                    paymentHistoryRows.map((row) => {
+                      const historyRowKey = row._id || `${row.Invoice}-${row.TransactionDate}`;
+                      const earningRows = Array.isArray(row.EarningRows) ? row.EarningRows : [];
+                      const isExpanded = expandedPaymentHistoryRowId === String(historyRowKey);
+
+                      return [
+                      <TableRow
+                        key={historyRowKey}
+                        hover
+                        onClick={() =>
+                          setExpandedPaymentHistoryRowId((prev) =>
+                            prev === String(historyRowKey) ? "" : String(historyRowKey)
+                          )
+                        }
+                        sx={{
+                          cursor: earningRows.length ? "pointer" : "default",
+                          "& > *": { borderBottom: earningRows.length && isExpanded ? "none" : undefined }
+                        }}
+                      >
                         <TableCell>
                           {row.TransactionDate
                             ? new Date(row.TransactionDate).toLocaleString("en-PH")
@@ -5937,7 +6618,10 @@ function ClientList() {
                             <span>
                               <IconButton
                                 color="primary"
-                                onClick={() => handleReprintPaymentHistory(row)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleReprintPaymentHistory(row);
+                                }}
                               >
                                 <ReceiptIcon />
                               </IconButton>
@@ -5950,7 +6634,10 @@ function ClientList() {
                               <span>
                                 <IconButton
                                   color="error"
-                                  onClick={() => handleOpenDeleteHistoryDialog(row)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleOpenDeleteHistoryDialog(row);
+                                  }}
                                   disabled={!row._id}
                                 >
                                   <DeleteOutlineOutlinedIcon />
@@ -5959,8 +6646,53 @@ function ClientList() {
                             </Tooltip>
                           </TableCell>
                         ) : null}
-                      </TableRow>
-                    ))
+                      </TableRow>,
+                      earningRows.length && isExpanded ? (
+                        <TableRow key={`${historyRowKey}-earnings`}>
+                          <TableCell colSpan={isAdminUser ? 14 : 13} sx={{ backgroundColor: "#f8fafc", py: 2 }}>
+                            <Typography sx={{ fontWeight: 700, color: "#0f172a", mb: 1 }}>
+                              Payment Entries
+                            </Typography>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
+                                  <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
+                                  <TableCell sx={{ fontWeight: 700 }}>Reference</TableCell>
+                                  <TableCell sx={{ fontWeight: 700 }}>Transfer Date</TableCell>
+                                  <TableCell sx={{ fontWeight: 700 }}>Receiver Last 4</TableCell>
+                                  <TableCell sx={{ fontWeight: 700 }}>Verified</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {earningRows.map((earningRow, index) => (
+                                  <TableRow key={earningRow._id || `${historyRowKey}-earning-${index}`}>
+                                    <TableCell>{earningRow.MOP || earningRow.PaymentMethod || "-"}</TableCell>
+                                    <TableCell>
+                                      PHP {Number(earningRow.Cash || earningRow.TotalAmount || 0).toLocaleString()}
+                                    </TableCell>
+                                    <TableCell>
+                                      {earningRow.MOPRef || earningRow.ReferenceNumber || earningRow.Invoice || "-"}
+                                    </TableCell>
+                                    <TableCell>{earningRow.TransferDate || "-"}</TableCell>
+                                    <TableCell>{earningRow.ReceiverLast4 || "-"}</TableCell>
+                                    <TableCell
+                                      sx={{
+                                        fontWeight: 700,
+                                        color: earningRow.Verified ? "#15803d" : "#b45309"
+                                      }}
+                                    >
+                                      {earningRow.Verified ? "VALIDATED" : "PENDING"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableCell>
+                        </TableRow>
+                      ) : null
+                      ];
+                    })
                   )}
                 </TableBody>
               </Table>

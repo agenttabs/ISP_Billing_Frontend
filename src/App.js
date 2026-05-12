@@ -77,6 +77,9 @@ function App() {
 
           <Route element={<RoleRoute allowedRoles={["ADMIN", "CASHIER"]} />}>
             <Route path="/clients" element={<ClientList />} />
+            <Route path="/clients/new" element={<ClientList />} />
+            <Route path="/clients/:id/edit" element={<ClientList />} />
+            <Route path="/editclient/:id" element={<ClientList />} />
             <Route path="/billing/:id" element={<Billing />} />
             <Route path="/clients/:id/payment-history" element={<ClientPaymentHistory />} />
             <Route path="/reports/transactions" element={<ReportTransactions />} />
