@@ -34,6 +34,7 @@ import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -91,8 +92,22 @@ const createPaymentEntry = (overrides = {}) => ({
   transferDate: "",
   receiverLast4: "",
   receiptImageUrl: "",
+  receiptImageDataUrl: "",
   ...overrides
 });
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file as data URL."));
+    reader.readAsDataURL(file);
+  });
+
+const dataUrlToBlob = async (dataUrl) => {
+  const response = await fetch(dataUrl);
+  return response.blob();
+};
 
 const toSalesInvoiceNumber = (value) => {
   const raw = String(value || "").trim();
@@ -1021,6 +1036,7 @@ function ClientList() {
   const [technicians, setTechnicians] = useState([]);
   const [repairSmsTemplate, setRepairSmsTemplate] = useState(null);
   const [repairSaving, setRepairSaving] = useState(false);
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   const [newClient, setNewClient] = useState(getDefaultNewClientForm());
   const [dhcpLeaseOptions, setDhcpLeaseOptions] = useState([]);
@@ -1149,13 +1165,16 @@ function ClientList() {
   const loadReceiptPrintConfig = async () => {
     try {
       const { data } = await API.get("/print-receipt");
-      setReceiptPrintConfig({
+      const nextConfig = {
         ...defaultReceiptPrintConfig,
         ...(data || {})
-      });
+      };
+      setReceiptPrintConfig(nextConfig);
+      return nextConfig;
     } catch (err) {
       console.error("PRINT RECEIPT CONFIG LOAD ERROR:", err);
       setReceiptPrintConfig(defaultReceiptPrintConfig);
+      return defaultReceiptPrintConfig;
     }
   };
 
@@ -1989,6 +2008,22 @@ function ClientList() {
       }
     }
 
+    const referenceIdMatch = cleaned.match(
+      /\breference\s*id\s*[:#-]?\s*([A-Z0-9\s-]{6,40})/i
+    );
+    if (referenceIdMatch?.[1]) {
+      const referenceIdCandidate = String(referenceIdMatch[1])
+        .replace(/[^A-Z0-9]/gi, "")
+        .trim();
+      if (
+        referenceIdCandidate.length >= 6 &&
+        /\d/.test(referenceIdCandidate) &&
+        !looksLikeDateOrTimeReference(referenceIdCandidate)
+      ) {
+        return referenceIdCandidate;
+      }
+    }
+
     const stripDateTimeTail = (value) =>
       String(value || "")
         .replace(
@@ -2098,6 +2133,19 @@ function ClientList() {
       }
     }
 
+    const expressSendRefMatch = cleaned.match(
+      /\bref\s*no\.?\s*[:#-]?\s*((?:\d[\s-]?){6,20})(?=\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}:\d{2}|$))/i
+    );
+    if (expressSendRefMatch?.[1]) {
+      const expressSendCandidate = expressSendRefMatch[1].replace(/[^\d]/g, "").trim();
+      if (
+        expressSendCandidate.length >= 6 &&
+        !looksLikeDateOrTimeReference(expressSendCandidate)
+      ) {
+        return expressSendCandidate;
+      }
+    }
+
     const groupedDigitMatch = cleaned.match(/(?:\d[\s-]?){8,20}/g) || [];
     const groupedDigitReference = groupedDigitMatch
       .map((value) => value.replace(/[^\d]/g, "").trim())
@@ -2124,7 +2172,7 @@ function ClientList() {
   const extractAmount = (text) => {
     const cleaned = text.replace(/,/g, "");
     const transferAmountMatch = cleaned.match(
-      /(transfer\s*amount|total\s*amount)\s*[:#-]?\s*(php|₱)?\s*([0-9]+(?:\.[0-9]{2})?)/i
+      /(transfer\s*amount|total\s*amount(?:\s*sent)?)\s*[:#-]?\s*(php|p|₱)?\s*([0-9]+(?:\.[0-9]{2})?)/i
     );
 
     if (transferAmountMatch?.[3]) {
@@ -2157,11 +2205,11 @@ function ClientList() {
     const cleaned = raw.replace(/\r/g, " ").replace(/\n/g, " ");
 
     const monthDateTimePattern =
-      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
     const dayFirstMonthDateTimePattern =
       /\b\d{1,2}\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}(?:\s+at)?\s+\d{1,2}:\d{2}\s*(?:AM|PM)\b/i;
     const monthDateTimeWithoutMeridiemPattern =
-      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4}\s+\d{1,2}:\d{2}\b/i;
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s*\d{1,2},?\s*\d{4},?\s+\d{1,2}:\d{2}\b/i;
     const dayFirstMonthDateTimeWithoutMeridiemPattern =
       /\b\d{1,2}\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}(?:\s+at)?\s+\d{1,2}:\d{2}\b/i;
     const slashDateTimePattern =
@@ -2254,6 +2302,20 @@ function ClientList() {
 
   const detectPaymentMethodFromText = (text) => {
     const normalized = text.toLowerCase();
+
+    if (
+      normalized.includes("express send") &&
+      (normalized.includes("sent via gcash") || normalized.includes("gcash"))
+    ) {
+      return "GCASH";
+    }
+
+    if (
+      (normalized.includes("g-xchange") || normalized.includes("gcash")) &&
+      (normalized.includes("instapay qrph") || normalized.includes("sent money via") || normalized.includes("maya"))
+    ) {
+      return "GCASH";
+    }
 
     if (
       (normalized.includes("maribank") || normalized.includes("transfer result")) &&
@@ -2924,9 +2986,11 @@ function ClientList() {
 
   const handleClosePaymentModal = (event, reason) => {
     if (reason === "backdropClick") return;
+    if (paymentSaving && event) return;
 
     setOpenPaymentModal(false);
     setPaymentReceiptLoading(false);
+    setPaymentSaving(false);
     setOpenPaymentEntriesModal(false);
     resetPaymentForm();
   };
@@ -3198,14 +3262,15 @@ function ClientList() {
   };
 
   const handleReprintPaymentHistory = async (row) => {
-    const receiptPayload = createReceiptPayloadFromHistoryRow(row, receiptPrintConfig);
+    const latestReceiptConfig = await loadReceiptPrintConfig();
+    const receiptPayload = createReceiptPayloadFromHistoryRow(row, latestReceiptConfig);
 
-    if (!receiptPrintConfig?.EnablePrinting) {
+    if (!latestReceiptConfig?.EnablePrinting) {
       showMessage("Printing Disabled", "Receipt printing is disabled in Print Receipt settings.", "info");
       return;
     }
 
-    if (receiptPrintConfig?.UseDirectPrint) {
+    if (latestReceiptConfig?.UseDirectPrint) {
       try {
         await tryAutoPrintToXprinter(receiptPayload);
         return;
@@ -3222,6 +3287,10 @@ function ClientList() {
   };
 
   const handleSavePayment = async () => {
+    if (paymentSaving) {
+      return;
+    }
+
     const amountPaid = totalPaymentReceived;
     const reconnectPlan = netPlans.find(
       (plan) => getPlanName(plan) === paymentForm.ReconnectPlan
@@ -3290,6 +3359,42 @@ function ClientList() {
       return;
     }
 
+        if (paymentRequiresReconnectFlow && !paymentSelectedAuthMode) {
+          showMessage("Reconnect Type Required", "Please select whether this client will reconnect as PPPOE or IPOE.", "warning");
+          return;
+        }
+
+    if (paymentRequiresReconnectFlow && !reconnectPlan) {
+      showMessage("Reconnect Plan Required", "Please select the new plan for this client before receiving payment.", "warning");
+      return;
+    }
+
+    if (
+      paymentRequiresReconnectFlow &&
+      paymentSelectedAuthMode === "IPOE" &&
+      !paymentReconnectMacAddress
+    ) {
+      showMessage(
+        "MAC Address Required",
+        "Please select the MAC Address to reconnect this IPOE client.",
+        "warning"
+      );
+      return;
+    }
+
+    if (paymentRequiresReconnectFlow && !paymentForm.ReferenceNumber.trim()) {
+      showMessage("Reference Required", "Please enter the payment reference number for this client.", "warning");
+      return;
+    }
+
+    if (projectedBalance !== 0) {
+      showMessage("Invalid Payment", "Ending balance must be exactly 0 before saving.", "warning");
+      return;
+    }
+
+    setPaymentSaving(true);
+
+    try {
       try {
         await API.post("/payments/validate-documents", {
           paymentReceipt: paymentReceiptNumber,
@@ -3297,13 +3402,15 @@ function ClientList() {
         });
         } catch (documentError) {
           if (documentError.response?.status === 409) {
-            showMessage(
+          showMessage(
             "Duplicate Payment Reference",
             documentError.response?.data?.error ||
               "Payment receipt or sales invoice already exists.",
             "error"
           );
-          return;
+          throw Object.assign(new Error("Payment document validation failed."), {
+            paymentValidationHandled: true
+          });
         }
 
         if (documentError.response?.status === 400) {
@@ -3313,7 +3420,9 @@ function ClientList() {
               "Payment receipt or sales invoice is required.",
             "warning"
           );
-          return;
+          throw Object.assign(new Error("Payment document validation failed."), {
+            paymentValidationHandled: true
+          });
         }
 
           throw documentError;
@@ -3348,43 +3457,11 @@ function ClientList() {
             `${validationError.response?.data?.error || "One or more non-cash references already exceed the allowed receipt amount."}${usedByAccounts}`,
             "error"
           );
-          return;
+          throw Object.assign(new Error("Payment reference validation failed."), {
+            paymentValidationHandled: true
+          });
         }
 
-        if (paymentRequiresReconnectFlow && !paymentSelectedAuthMode) {
-          showMessage("Reconnect Type Required", "Please select whether this client will reconnect as PPPOE or IPOE.", "warning");
-          return;
-        }
-
-    if (paymentRequiresReconnectFlow && !reconnectPlan) {
-      showMessage("Reconnect Plan Required", "Please select the new plan for this client before receiving payment.", "warning");
-      return;
-    }
-
-    if (
-      paymentRequiresReconnectFlow &&
-      paymentSelectedAuthMode === "IPOE" &&
-      !paymentReconnectMacAddress
-    ) {
-      showMessage(
-        "MAC Address Required",
-        "Please select the MAC Address to reconnect this IPOE client.",
-        "warning"
-      );
-      return;
-    }
-
-    if (paymentRequiresReconnectFlow && !paymentForm.ReferenceNumber.trim()) {
-      showMessage("Reference Required", "Please enter the payment reference number for this client.", "warning");
-      return;
-    }
-
-    if (projectedBalance !== 0) {
-      showMessage("Invalid Payment", "Ending balance must be exactly 0 before saving.", "warning");
-      return;
-    }
-
-    try {
       const balance = totalAmountToPay - amountPaid;
       const existingNote = selectedClient.Note ? `${selectedClient.Note}\n` : "";
       const paymentNote = paymentForm.Notes
@@ -3432,7 +3509,6 @@ function ClientList() {
           TransferDate: topLevelTransferDate,
           GCashTransferDate: topLevelTransferDate,
           ReceiverLast4: topLevelReceiverLast4,
-          GCashReceiverLast4: topLevelReceiverLast4,
         Verified: false,
         CashAmount: cashPaymentAmount,
         GCashAmount: gcashPaymentAmount,
@@ -3491,8 +3567,6 @@ function ClientList() {
             GCashTransferDate:
               entry.method === "GCASH" ? String(entry.transferDate || "").trim() : "",
             ReceiverLast4: entry.method === "CASH" ? "" : String(entry.receiverLast4 || "").trim(),
-            GCashReceiverLast4:
-              entry.method === "GCASH" ? String(entry.receiverLast4 || "").trim() : "",
             DeclaredBy: createdByName || createdById,
             DeclaredById: createdById,
             TransactionDate: transactionDateTime,
@@ -3605,9 +3679,12 @@ function ClientList() {
           );
         }
 
-      if (receiptPrintConfig?.EnablePrinting) {
+      const latestReceiptConfig = await loadReceiptPrintConfig();
+      receiptPayload.receiptConfig = latestReceiptConfig;
+
+      if (latestReceiptConfig?.EnablePrinting) {
         try {
-          if (receiptPrintConfig?.UseDirectPrint) {
+          if (latestReceiptConfig?.UseDirectPrint) {
             try {
               await tryAutoPrintToXprinter(receiptPayload);
             } catch (printError) {
@@ -3635,6 +3712,10 @@ function ClientList() {
         }
       }
     } catch (err) {
+      if (err?.paymentValidationHandled) {
+        return;
+      }
+
       console.error("PAYMENT ERROR:", err.response?.data || err.message);
 
       if (createdEarningIds.length || createdTransactionId) {
@@ -3658,6 +3739,8 @@ function ClientList() {
         "Failed to save payment.";
 
       showMessage("Payment Failed", serverMessage, "error");
+    } finally {
+      setPaymentSaving(false);
     }
   };
 
@@ -5844,6 +5927,7 @@ function ClientList() {
           <Button
             onClick={handleClosePaymentModal}
             sx={{ textTransform: "none", fontWeight: 700 }}
+            disabled={paymentSaving}
           >
             Cancel
           </Button>
@@ -5851,7 +5935,12 @@ function ClientList() {
             variant="contained"
             color="success"
             onClick={handleSavePayment}
-            disabled={paymentReceiptLoading}
+            disabled={paymentReceiptLoading || paymentSaving}
+            startIcon={
+              paymentSaving ? (
+                <CircularProgress size={16} color="inherit" thickness={5} />
+              ) : null
+            }
             sx={{
               px: 4,
               py: 1,
@@ -5861,7 +5950,7 @@ function ClientList() {
               boxShadow: "0 10px 22px rgba(22, 163, 74, 0.18)"
             }}
           >
-            Receive Payment
+            {paymentSaving ? "Saving Payment..." : "Receive Payment"}
           </Button>
         </DialogActions>
       </Dialog>
