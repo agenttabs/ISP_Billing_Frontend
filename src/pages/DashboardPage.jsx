@@ -180,6 +180,81 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2
   }).format(Number(value || 0));
 
+const normalizePaymentMethod = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
+const getEarningMethod = (row) =>
+  normalizePaymentMethod(row?.MOP || row?.Type || row?.PaymentMethod);
+
+const getEarningAmount = (row) => Number(row?.Cash || row?.TotalAmount || 0);
+
+const getEarningAccountKey = (row) =>
+  String(row?.AccountName || row?.ClientName || row?._id || "").trim();
+
+const buildCollectionSummaryFromEarnings = (rows = []) => {
+  const totals = {
+    gcashPayment: 0,
+    paymayaPayment: 0,
+    bankPayment: 0,
+    cashPayment: 0,
+    gcashPaidClients: 0,
+    paymayaPaidClients: 0,
+    bankPaidClients: 0,
+    cashPaidClients: 0
+  };
+  const paidClientSets = {
+    GCASH: new Set(),
+    PAYMAYA: new Set(),
+    BANK: new Set(),
+    CASH: new Set()
+  };
+
+  rows.forEach((row) => {
+    const method = getEarningMethod(row);
+    const amount = getEarningAmount(row);
+    const accountKey = getEarningAccountKey(row);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    if (method === "GCASH") {
+      totals.gcashPayment += amount;
+      if (accountKey) paidClientSets.GCASH.add(accountKey);
+    } else if (method === "PAYMAYA") {
+      totals.paymayaPayment += amount;
+      if (accountKey) paidClientSets.PAYMAYA.add(accountKey);
+    } else if (method === "BANK") {
+      totals.bankPayment += amount;
+      if (accountKey) paidClientSets.BANK.add(accountKey);
+    } else if (method === "CASH") {
+      totals.cashPayment += amount;
+      if (accountKey) paidClientSets.CASH.add(accountKey);
+    }
+  });
+
+  totals.gcashPaidClients = paidClientSets.GCASH.size;
+  totals.paymayaPaidClients = paidClientSets.PAYMAYA.size;
+  totals.bankPaidClients = paidClientSets.BANK.size;
+  totals.cashPaidClients = paidClientSets.CASH.size;
+
+  return totals;
+};
+
+const mapEarningToCollectionRow = (row) => ({
+  rowId: String(row?._id || row?.Invoice || row?.AccountName || Math.random()),
+  transactionDate: row?.TransactionDate || row?.createdAt || "",
+  accountName: row?.AccountName || "-",
+  clientName: row?.ClientName || row?.Item || "-",
+  method: getEarningMethod(row),
+  reference: row?.MOPRef || row?.ReferenceNumber || row?.TransactionCode || "-",
+  receiptNumber: row?.PaymentReceipt || row?.Invoice || row?.TransactionCode || "-",
+  amount: getEarningAmount(row),
+  createdBy: row?.DeclaredBy || row?.CreatedBy || row?.CreatedById || "-"
+});
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const userType = String(user?.type || user?.role || "").trim().toUpperCase();
@@ -196,13 +271,42 @@ export default function DashboardPage() {
   const [listDialogTitle, setListDialogTitle] = useState("");
   const [listDialogType, setListDialogType] = useState("client");
   const [listEmptyMessage, setListEmptyMessage] = useState("");
+  const [cashierEarningsRows, setCashierEarningsRows] = useState([]);
 
   useEffect(() => {
     const loadSummary = async () => {
       try {
         setLoading(true);
-        const { data } = await API.get("/dashboard/summary");
-        setSummary(data);
+        const [
+          dashboardSummaryResponse,
+          earningsResponse,
+          disconnectionResponse,
+          dueTodayResponse,
+          pastDueResponse
+        ] = await Promise.all([
+          userType === "CASHIER" ? Promise.resolve({ data: {} }) : API.get("/dashboard/summary"),
+          userType === "CASHIER" ? API.get("/earnings") : Promise.resolve({ data: [] }),
+          userType === "CASHIER" ? API.get("/dashboard/disconnection-today") : Promise.resolve({ data: { total: 0 } }),
+          userType === "CASHIER" ? API.get("/dashboard/due-today") : Promise.resolve({ data: { total: 0 } }),
+          userType === "CASHIER" ? API.get("/dashboard/past-due-unpaid") : Promise.resolve({ data: { total: 0 } })
+        ]);
+        const dashboardSummary = dashboardSummaryResponse?.data || {};
+        const earningsRows = Array.isArray(earningsResponse?.data)
+          ? earningsResponse.data
+          : [];
+
+        setCashierEarningsRows(earningsRows);
+        setSummary({
+          ...dashboardSummary,
+          ...(userType === "CASHIER"
+            ? {
+                ...buildCollectionSummaryFromEarnings(earningsRows),
+                forDisconnectionToday: Number(disconnectionResponse?.data?.total || 0),
+                dueToday: Number(dueTodayResponse?.data?.total || 0),
+                pastDueUnpaid: Number(pastDueResponse?.data?.total || 0)
+              }
+            : {})
+        });
         setError("");
       } catch (err) {
         setError(err.response?.data?.error || "Failed to load dashboard.");
@@ -212,7 +316,7 @@ export default function DashboardPage() {
     };
 
     loadSummary();
-  }, []);
+  }, [userType]);
 
   const openListDialog = async (card) => {
     try {
@@ -221,6 +325,19 @@ export default function DashboardPage() {
       setListEmptyMessage(card.emptyMessage || "No client found.");
       setListDialogOpen(true);
       setListLoading(true);
+
+      if (userType === "CASHIER" && card.listType === "collection") {
+        const method = normalizePaymentMethod(card.endpoint?.split("/").pop());
+        const rows = cashierEarningsRows
+          .filter((row) => getEarningMethod(row) === method)
+          .map(mapEarningToCollectionRow)
+          .sort((a, b) => new Date(b.transactionDate || 0) - new Date(a.transactionDate || 0));
+
+        setListRows(rows);
+        setListError("");
+        return;
+      }
+
       const { data } = await API.get(card.endpoint);
       setListRows(Array.isArray(data?.rows) ? data.rows : []);
       setListError("");

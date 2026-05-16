@@ -494,12 +494,22 @@ const buildBillingPeriodOptions = (client) => {
   const installDate = getClientInstallDate(client);
   const start = new Date(installDate.getFullYear(), installDate.getMonth() + 1, 1, 12, 0, 0, 0);
   const today = new Date();
-  const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0, 0);
-  const end = currentMonth > start ? currentMonth : start;
+  const clientDueDate = new Date(client?.DueDate || "");
+  const currentDueMonth = Number.isNaN(clientDueDate.getTime())
+    ? new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0, 0)
+    : new Date(clientDueDate.getFullYear(), clientDueDate.getMonth(), 1, 12, 0, 0, 0);
+  const nextDueAllowedDate = Number.isNaN(clientDueDate.getTime())
+    ? null
+    : new Date(clientDueDate.getFullYear(), clientDueDate.getMonth(), clientDueDate.getDate() + 15, 0, 0, 0, 0);
+  const end =
+    nextDueAllowedDate && today >= nextDueAllowedDate
+      ? new Date(currentDueMonth.getFullYear(), currentDueMonth.getMonth() + 1, 1, 12, 0, 0, 0)
+      : currentDueMonth;
   const options = [];
   const cursor = new Date(start);
+  const finalEnd = end > start ? end : start;
 
-  while (cursor <= end) {
+  while (cursor <= finalEnd) {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     options.push({
@@ -514,7 +524,7 @@ const buildBillingPeriodOptions = (client) => {
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
-  return options.reverse();
+  return options.reverse().slice(0, 6);
 };
 
 const getDefaultNewClientForm = () => {
@@ -1129,6 +1139,10 @@ function ClientList() {
     title: "",
     message: "",
     severity: "info"
+  });
+  const [smsConfirmDialog, setSmsConfirmDialog] = useState({
+    open: false,
+    client: null
   });
   const [overdueDialog, setOverdueDialog] = useState({
     open: false,
@@ -1864,6 +1878,29 @@ function ClientList() {
       setPaymentHistoryRows([]);
     } finally {
       setPaymentHistoryLoading(false);
+    }
+  };
+
+  const handleOpenSmsConfirmDialog = (client) => {
+    setSmsConfirmDialog({
+      open: true,
+      client
+    });
+  };
+
+  const handleCloseSmsConfirmDialog = () => {
+    setSmsConfirmDialog({
+      open: false,
+      client: null
+    });
+  };
+
+  const handleConfirmSendSms = async () => {
+    const client = smsConfirmDialog.client;
+    handleCloseSmsConfirmDialog();
+
+    if (client) {
+      await handleResendPaymentReceivedSms(client);
     }
   };
 
@@ -4679,7 +4716,7 @@ function ClientList() {
                     <Tooltip title="SMS">
                       <IconButton
                         sx={{ "&:hover": { color: "#0f766e" } }}
-                        onClick={() => handleResendPaymentReceivedSms(c)}
+                        onClick={() => handleOpenSmsConfirmDialog(c)}
                       >
                         <SmsOutlinedIcon />
                       </IconButton>
@@ -6516,6 +6553,32 @@ function ClientList() {
       </Dialog>
 
       <Dialog
+        open={smsConfirmDialog.open}
+        onClose={handleCloseSmsConfirmDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Send SMS?</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography>
+            Are you sure you want to send an SMS to{" "}
+            <strong>
+              {smsConfirmDialog.client?.AccountName ||
+                smsConfirmDialog.client?.ClientName ||
+                "this client"}
+            </strong>
+            ?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseSmsConfirmDialog}>Cancel</Button>
+          <Button variant="contained" onClick={handleConfirmSendSms}>
+            Send SMS
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
         open={billingPeriodDialog.open}
         onClose={handleCloseBillingPeriodDialog}
         fullWidth
@@ -6553,7 +6616,7 @@ function ClientList() {
               ))}
             </TextField>
             <Typography sx={{ color: "#64748b", fontSize: "0.82rem" }}>
-              Available months start from the client installation month.
+              Available months start from the month after installation.
             </Typography>
           </Stack>
         </DialogContent>

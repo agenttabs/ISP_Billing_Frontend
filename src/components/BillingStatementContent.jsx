@@ -76,6 +76,28 @@ const getPaymentDate = (row) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const getClientInstallDate = (client) => {
+  const candidates = [
+    client?.DateEntry,
+    client?.DateInstalled,
+    client?.InstallDate,
+    client?.createdAt
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 const getBillingDueDate = (client, billingPeriod, fallbackRange) => {
   const year = Number(billingPeriod?.year);
   const month = Number(billingPeriod?.month);
@@ -155,20 +177,85 @@ const getPreviousBillingDueDate = (billingDueDate) => {
   );
 };
 
-const isPaymentBeforeDueDate = (date, billingDueDate) => {
+const isPaymentForDueMonth = (date, billingDueDate) => {
   if (!date || !billingDueDate) {
     return false;
   }
 
-  const previousDueDate = getPreviousBillingDueDate(billingDueDate);
-  const dueEnd = new Date(billingDueDate);
-  dueEnd.setHours(23, 59, 59, 999);
-
-  if (previousDueDate && date <= previousDueDate) {
+  const dueDate = new Date(billingDueDate);
+  if (Number.isNaN(dueDate.getTime())) {
     return false;
   }
 
-  return date <= dueEnd;
+  const monthStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1, 0, 0, 0, 0);
+  const monthEnd = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  return date >= monthStart && date <= monthEnd;
+};
+
+const getPaymentAmount = (row) =>
+  Number(row?.TotalAmount || row?.Cash || row?.Amount || row?.PaymentAmount || 0);
+
+const getPaymentsForDueCycle = (history, billingDueDate) =>
+  (history || [])
+    .filter((row) => isPaymentForDueMonth(getPaymentDate(row), billingDueDate))
+    .sort((a, b) => {
+      const left = getPaymentDate(a)?.getTime() || 0;
+      const right = getPaymentDate(b)?.getTime() || 0;
+
+      return right - left;
+    });
+
+const getFirstBillingDueDate = (client) => {
+  const installDate = getClientInstallDate(client);
+  if (!installDate) {
+    return null;
+  }
+
+  const currentDueDate = new Date(client?.DueDate || "");
+  const dueDay = !Number.isNaN(currentDueDate.getTime())
+    ? currentDueDate.getDate()
+    : Number(client?.SubscriptionCover) || installDate.getDate();
+  const firstBillingMonth = new Date(
+    installDate.getFullYear(),
+    installDate.getMonth() + 1,
+    1,
+    12,
+    0,
+    0,
+    0
+  );
+  const lastDay = new Date(
+    firstBillingMonth.getFullYear(),
+    firstBillingMonth.getMonth() + 1,
+    0
+  ).getDate();
+
+  return new Date(
+    firstBillingMonth.getFullYear(),
+    firstBillingMonth.getMonth(),
+    Math.min(dueDay, lastDay),
+    12,
+    0,
+    0,
+    0
+  );
+};
+
+const getPreviousDueBalance = ({ client, history, billingDueDate, monthlyDue }) => {
+  const previousDueDate = getPreviousBillingDueDate(billingDueDate);
+  const firstBillingDueDate = getFirstBillingDueDate(client);
+
+  if (!previousDueDate || !firstBillingDueDate || previousDueDate < firstBillingDueDate) {
+    return 0;
+  }
+
+  const paidForPreviousDue = getPaymentsForDueCycle(history, previousDueDate).reduce(
+    (total, row) => total + getPaymentAmount(row),
+    0
+  );
+
+  return Math.max(Number(monthlyDue || 0) - paidForPreviousDue, 0);
 };
 
 export default function BillingStatementContent({
@@ -202,16 +289,23 @@ export default function BillingStatementContent({
   );
   const selectedHistory = useMemo(() => {
     if (!billingPeriod) {
-      return history;
+      return (history || []).slice().sort((a, b) => {
+        const left = getPaymentDate(a)?.getTime() || 0;
+        const right = getPaymentDate(b)?.getTime() || 0;
+
+        return right - left;
+      });
     }
 
-    return (history || []).filter((row) =>
-      isPaymentBeforeDueDate(getPaymentDate(row), billingDueDate)
-    );
+    return getPaymentsForDueCycle(history, billingDueDate);
   }, [billingDueDate, billingPeriod, history]);
   const latestPayment = selectedHistory[0] || null;
-  const previousBalance = Math.max(Number(client?.Balance || 0), 0);
   const monthlyDue = Number(client?.AmountDue || 0);
+  const previousDueBalance = billingPeriod
+    ? getPreviousDueBalance({ client, history, billingDueDate, monthlyDue })
+    : 0;
+  const previousBalance =
+    Math.max(Number(client?.Balance || 0), 0) + previousDueBalance;
   const totalDue = monthlyDue + previousBalance;
 
   const handleGeneratePdf = () => {
