@@ -71,24 +71,145 @@ export const getStatementRange = (client) => {
   return { start, end };
 };
 
+const getPaymentDate = (row) => {
+  const date = new Date(row?.TransactionDate || row?.PaymentDate || row?.createdAt || "");
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getBillingDueDate = (client, billingPeriod, fallbackRange) => {
+  const year = Number(billingPeriod?.year);
+  const month = Number(billingPeriod?.month);
+
+  if (Number.isInteger(year) && Number.isInteger(month) && month >= 0 && month <= 11) {
+    const currentDueDate = new Date(client?.DueDate || "");
+    const dueDay = !Number.isNaN(currentDueDate.getTime())
+      ? currentDueDate.getDate()
+      : Number(client?.SubscriptionCover) || 1;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+
+    return new Date(year, month, Math.min(dueDay, lastDay), 12, 0, 0, 0);
+  }
+
+  return client?.DueDate || fallbackRange?.start || null;
+};
+
+const getSelectedStatementRange = (client, billingPeriod) => {
+  const year = Number(billingPeriod?.year);
+  const month = Number(billingPeriod?.month);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11) {
+    return getStatementRange(client);
+  }
+
+  const billingDueDate = getBillingDueDate(client, billingPeriod);
+  if (!billingDueDate) {
+    return {
+      start: new Date(year, month, 1, 12, 0, 0, 0),
+      end: new Date(year, month + 1, 0, 12, 0, 0, 0)
+    };
+  }
+
+  const anchorDay = billingDueDate.getDate();
+  const start = new Date(billingDueDate);
+  const nextMonthLastDay = new Date(year, month + 2, 0).getDate();
+  const nextDueDate = new Date(
+    year,
+    month + 1,
+    Math.min(anchorDay, nextMonthLastDay),
+    12,
+    0,
+    0,
+    0
+  );
+  const end = new Date(nextDueDate);
+  end.setDate(end.getDate() - 1);
+
+  return { start, end };
+};
+
+const getPreviousBillingDueDate = (billingDueDate) => {
+  if (!billingDueDate) {
+    return null;
+  }
+
+  const dueDate = new Date(billingDueDate);
+  if (Number.isNaN(dueDate.getTime())) {
+    return null;
+  }
+
+  const dueDay = dueDate.getDate();
+  const previousMonthLastDay = new Date(
+    dueDate.getFullYear(),
+    dueDate.getMonth(),
+    0
+  ).getDate();
+
+  return new Date(
+    dueDate.getFullYear(),
+    dueDate.getMonth() - 1,
+    Math.min(dueDay, previousMonthLastDay),
+    0,
+    0,
+    0,
+    0
+  );
+};
+
+const isPaymentBeforeDueDate = (date, billingDueDate) => {
+  if (!date || !billingDueDate) {
+    return false;
+  }
+
+  const previousDueDate = getPreviousBillingDueDate(billingDueDate);
+  const dueEnd = new Date(billingDueDate);
+  dueEnd.setHours(23, 59, 59, 999);
+
+  if (previousDueDate && date <= previousDueDate) {
+    return false;
+  }
+
+  return date <= dueEnd;
+};
+
 export default function BillingStatementContent({
   client,
   history = [],
   loading = false,
   error = "",
   embedded = false,
+  billingPeriod = null,
   onClose,
   onBack
 }) {
-  const statementRange = useMemo(() => getStatementRange(client), [client]);
-  const statementMonth = statementRange.start
-    ? statementRange.start.toLocaleDateString("en-PH", {
+  const statementRange = useMemo(() => {
+    return getSelectedStatementRange(client, billingPeriod);
+  }, [billingPeriod, client]);
+  const statementMonthDate =
+    Number.isInteger(Number(billingPeriod?.year)) &&
+    Number.isInteger(Number(billingPeriod?.month))
+      ? new Date(Number(billingPeriod.year), Number(billingPeriod.month), 1, 12, 0, 0, 0)
+      : statementRange.start;
+  const statementMonth = statementMonthDate
+    ? statementMonthDate.toLocaleDateString("en-PH", {
         month: "long",
         year: "numeric"
       })
     : "Billing Statement";
 
-  const latestPayment = history[0] || null;
+  const billingDueDate = useMemo(
+    () => getBillingDueDate(client, billingPeriod, statementRange),
+    [billingPeriod, client, statementRange]
+  );
+  const selectedHistory = useMemo(() => {
+    if (!billingPeriod) {
+      return history;
+    }
+
+    return (history || []).filter((row) =>
+      isPaymentBeforeDueDate(getPaymentDate(row), billingDueDate)
+    );
+  }, [billingDueDate, billingPeriod, history]);
+  const latestPayment = selectedHistory[0] || null;
   const previousBalance = Math.max(Number(client?.Balance || 0), 0);
   const monthlyDue = Number(client?.AmountDue || 0);
   const totalDue = monthlyDue + previousBalance;
@@ -134,7 +255,7 @@ export default function BillingStatementContent({
 
     doc.text(`Account Number: ${client.AccountNumber || "-"}`, 112, 53);
     doc.text(`Plan: ${formatCurrency(client.AmountDue || 0)}`, 112, 59);
-    doc.text(`Due Date: ${formatDate(client.DueDate)}`, 112, 65);
+    doc.text(`Due Date: ${formatDate(billingDueDate)}`, 112, 65);
 
     autoTable(doc, {
       startY: 80,
@@ -191,7 +312,7 @@ export default function BillingStatementContent({
     doc.setFontSize(10);
     doc.text(
       [
-        `Please settle your account on or before ${formatDate(client.DueDate)}.`,
+        `Please settle your account on or before ${formatDate(billingDueDate)}.`,
         "Payments posted after the due date may affect service continuity depending on account status.",
         "Keep this billing statement for your records."
       ],
@@ -265,7 +386,7 @@ export default function BillingStatementContent({
             <Stack spacing={1.15} sx={{ mt: 1.5 }}>
               <Typography><strong>Account Number:</strong> {client?.AccountNumber || "-"}</Typography>
               <Typography><strong>Plan:</strong> {Number(client?.AmountDue || 0).toLocaleString("en-PH")}</Typography>
-              <Typography><strong>Current Due Date:</strong> {formatDate(client?.DueDate)}</Typography>
+              <Typography><strong>Billing Due Date:</strong> {formatDate(billingDueDate)}</Typography>
             </Stack>
           </Paper>
         </Stack>
@@ -325,7 +446,7 @@ export default function BillingStatementContent({
         <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: "1px solid #dbe4ee" }}>
           <Typography sx={{ fontWeight: 800, color: "#0f172a", mb: 1.5 }}>Payment Notes</Typography>
           <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
-            Please settle your account on or before <strong>{formatDate(client?.DueDate)}</strong>.
+            Please settle your account on or before <strong>{formatDate(billingDueDate)}</strong>.
             Payments posted after the due date may affect service continuity depending on account status.
           </Typography>
           <Typography sx={{ color: "#475569", lineHeight: 1.7, mt: 2 }}>

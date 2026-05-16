@@ -22,7 +22,8 @@ import {
   Switch,
   Tabs,
   Tab,
-  CircularProgress
+  CircularProgress,
+  Stack
   } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
@@ -37,7 +38,7 @@ import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { io } from "socket.io-client";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
@@ -462,6 +463,58 @@ const resolveBillingAnchorDay = (dueDateValue, preferredDay) => {
   }
 
   return normalizedPreferredDay === dueDay ? normalizedPreferredDay : dueDay;
+};
+
+const getClientInstallDate = (client) => {
+  const candidates = [
+    client?.DateEntry,
+    client?.DateInstalled,
+    client?.InstallDate,
+    client?.createdAt
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return new Date();
+};
+
+const getMonthKey = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+const buildBillingPeriodOptions = (client) => {
+  const installDate = getClientInstallDate(client);
+  const start = new Date(installDate.getFullYear(), installDate.getMonth() + 1, 1, 12, 0, 0, 0);
+  const today = new Date();
+  const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0, 0);
+  const end = currentMonth > start ? currentMonth : start;
+  const options = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    options.push({
+      key: getMonthKey(cursor),
+      year,
+      month,
+      label: cursor.toLocaleDateString("en-PH", {
+        month: "long",
+        year: "numeric"
+      })
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return options.reverse();
 };
 
 const getDefaultNewClientForm = () => {
@@ -1025,6 +1078,11 @@ function ClientList() {
   const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
   const [openPaymentEntriesModal, setOpenPaymentEntriesModal] = useState(false);
   const [openBillingModal, setOpenBillingModal] = useState(false);
+  const [billingPeriodDialog, setBillingPeriodDialog] = useState({
+    open: false,
+    client: null,
+    periodKey: ""
+  });
   const [openPaymentHistoryModal, setOpenPaymentHistoryModal] = useState(false);
   const [openMikrotikStatusModal, setOpenMikrotikStatusModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -1087,6 +1145,7 @@ function ClientList() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
   const [billingHistoryRows, setBillingHistoryRows] = useState([]);
+  const [selectedBillingPeriod, setSelectedBillingPeriod] = useState(null);
   const [mikrotikStatusLoading, setMikrotikStatusLoading] = useState(false);
   const [mikrotikStatusError, setMikrotikStatusError] = useState("");
   const [mikrotikStatusData, setMikrotikStatusData] = useState(null);
@@ -1580,6 +1639,10 @@ function ClientList() {
 
   const activeCount = Number(clientMeta?.activeCount || 0);
   const disconnectedCount = Number(clientMeta?.disconnectedCount || 0);
+  const billingPeriodOptions = useMemo(
+    () => buildBillingPeriodOptions(billingPeriodDialog.client),
+    [billingPeriodDialog.client]
+  );
 
   const handleRightClick = (event, client) => {
     event.preventDefault();
@@ -1597,10 +1660,31 @@ function ClientList() {
     handleClose();
   };
 
-  const handleOpenBillingModal = async (client) => {
+  const handleOpenBillingPeriodDialog = (client) => {
+    if (!client) return;
+
+    const options = buildBillingPeriodOptions(client);
+    setSelectedClient(client);
+    setBillingPeriodDialog({
+      open: true,
+      client,
+      periodKey: options[0]?.key || getMonthKey(new Date())
+    });
+  };
+
+  const handleCloseBillingPeriodDialog = () => {
+    setBillingPeriodDialog({
+      open: false,
+      client: null,
+      periodKey: ""
+    });
+  };
+
+  const handleOpenBillingModal = async (client, billingPeriod = null) => {
     if (!client) return;
 
     setSelectedClient(client);
+    setSelectedBillingPeriod(billingPeriod);
     setOpenBillingModal(true);
     setBillingLoading(true);
     setBillingError("");
@@ -1629,10 +1713,28 @@ function ClientList() {
     setBillingLoading(false);
     setBillingError("");
     setBillingHistoryRows([]);
+    setSelectedBillingPeriod(null);
+  };
+
+  const handleConfirmBillingPeriod = () => {
+    const option = billingPeriodOptions.find(
+      (item) => item.key === billingPeriodDialog.periodKey
+    );
+
+    if (!billingPeriodDialog.client || !option) {
+      return;
+    }
+
+    handleCloseBillingPeriodDialog();
+    handleOpenBillingModal(billingPeriodDialog.client, {
+      year: option.year,
+      month: option.month,
+      label: option.label
+    });
   };
 
   const handleBilling = () => {
-    handleOpenBillingModal(selectedClient);
+    handleOpenBillingPeriodDialog(selectedClient);
     handleClose();
   };
 
@@ -4550,7 +4652,7 @@ function ClientList() {
                     <Tooltip title="Billing">
                       <IconButton
                         sx={{ "&:hover": { color: "#0288d1" } }}
-                        onClick={() => handleOpenBillingModal(c)}
+                        onClick={() => handleOpenBillingPeriodDialog(c)}
                       >
                         <ReceiptIcon />
                       </IconButton>
@@ -6414,6 +6516,60 @@ function ClientList() {
       </Dialog>
 
       <Dialog
+        open={billingPeriodDialog.open}
+        onClose={handleCloseBillingPeriodDialog}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 3
+          }
+        }}
+      >
+        <DialogTitle>Select Billing Month</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Stack spacing={2}>
+            <Typography sx={{ color: "#475569", fontSize: "0.92rem" }}>
+              {billingPeriodDialog.client?.ClientName ||
+                billingPeriodDialog.client?.AccountName ||
+                "Client"}
+            </Typography>
+            <TextField
+              select
+              label="Month and Year"
+              value={billingPeriodDialog.periodKey}
+              onChange={(event) =>
+                setBillingPeriodDialog((prev) => ({
+                  ...prev,
+                  periodKey: event.target.value
+                }))
+              }
+              fullWidth
+            >
+              {billingPeriodOptions.map((option) => (
+                <MenuItem key={option.key} value={option.key}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Typography sx={{ color: "#64748b", fontSize: "0.82rem" }}>
+              Available months start from the client installation month.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseBillingPeriodDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmBillingPeriod}
+            disabled={!billingPeriodDialog.periodKey}
+          >
+            Open Billing
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
         open={openBillingModal}
         onClose={handleCloseBillingModal}
         fullWidth
@@ -6432,6 +6588,7 @@ function ClientList() {
             history={billingHistoryRows}
             loading={billingLoading}
             error={billingError}
+            billingPeriod={selectedBillingPeriod}
             embedded
             onClose={handleCloseBillingModal}
           />

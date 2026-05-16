@@ -924,7 +924,7 @@ export default function TransactionVerification() {
                         <TableCell>{record.VerificationReceiverLast4 || record.ReceiverLast4 || record.GCashReceiverLast4 || "-"}</TableCell>
                         <TableCell>{record.VerificationTransferDate || record.TransferDate || record.GCashTransferDate || "-"}</TableCell>
                       <TableCell>{record.PaymentReceipt || record.Invoice || "-"}</TableCell>
-                      <TableCell>{formatDateTime(record.TransactionDate || record.PaymentDate)}</TableCell>
+                      <TableCell>{formatDateTime(record.TransactionDate )}</TableCell>
                       <TableCell>
                         {isPdfMatched ? (
                           <Chip size="small" color="success" label="Matched in PDF" />

@@ -27,6 +27,14 @@ const defaultForm = {
   notes: ""
 };
 
+const toArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.rows)) return value.rows;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.clients)) return value.clients;
+  return [];
+};
+
 const formatDateTime = (value) => {
   if (!value) return "-";
 
@@ -85,11 +93,11 @@ export default function ClientBypass() {
     try {
       const [{ data: bypassData }, { data: clientData }] = await Promise.all([
         API.get("/client-bypass"),
-        API.get("/clients")
+        API.get("/client-bypass/clients")
       ]);
 
-      setBypassRows(bypassData || []);
-      setClients(clientData || []);
+      setBypassRows(toArray(bypassData));
+      setClients(toArray(clientData));
       setError("");
     } catch (err) {
       setError(err.response?.data?.error || "Failed to load client bypass module.");

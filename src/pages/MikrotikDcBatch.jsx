@@ -62,6 +62,10 @@ const getResultChip = (value) => {
     return { label: "Already Disconnected", backgroundColor: "#fff7ed", color: "#c2410c" };
   }
 
+  if (normalized === "UPDATED_SYSTEM_ONLY") {
+    return { label: "System Only", backgroundColor: "#fef3c7", color: "#92400e" };
+  }
+
   return { label: value || "-", backgroundColor: "#f8fafc", color: "#475569" };
 };
 
