@@ -53,6 +53,7 @@ import Tesseract from "tesseract.js";
 import API, { SOCKET_BASE_URL } from "../api/api";
 import BillingStatementContent from "../components/BillingStatementContent";
 import PageHeader from "../layout/PageHeader";
+import { useAuth } from "../context/auth.context";
 import { useClient } from "../context/client.context";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -108,6 +109,19 @@ const fileToDataUrl = (file) =>
 const dataUrlToBlob = async (dataUrl) => {
   const response = await fetch(dataUrl);
   return response.blob();
+};
+
+const getReceiptImageSource = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.startsWith("data:") || raw.startsWith("blob:") || /^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  return `data:image/jpeg;base64,${raw}`;
 };
 
 const toSalesInvoiceNumber = (value) => {
@@ -1067,7 +1081,7 @@ function ClientList() {
       location.pathname === `/editclient/${clientRouteId}`);
   const isClientFormPage = isClientAddPage || isClientEditPage;
 
-  const currentUser = JSON.parse(localStorage.getItem("user") || "null");
+  const { user: currentUser } = useAuth();
   const currentUserType = String(
     currentUser?.type || currentUser?.role || ""
   ).trim().toUpperCase();
@@ -2499,6 +2513,7 @@ function ClientList() {
     setOcrMessage("Reading receipt...");
 
     try {
+      const receiptImageDataUrl = await fileToDataUrl(file);
       const result = await Tesseract.recognize(file, "eng");
       const ocrText = result.data.text || "";
       const extractedRef = extractReferenceNumber(ocrText);
@@ -2585,7 +2600,8 @@ function ClientList() {
           receiptAmount: extractedAmount || next[nextIndex].receiptAmount,
           transferDate: extractedTransferDate || next[nextIndex].transferDate,
           receiverLast4: extractedReceiverLast4 || next[nextIndex].receiverLast4,
-          receiptImageUrl: previewUrl
+          receiptImageUrl: previewUrl,
+          receiptImageDataUrl
         };
         return next;
       });
@@ -2648,6 +2664,69 @@ function ClientList() {
       message,
       severity
     });
+  };
+
+  const closeMessageBox = () => {
+    setMessageBox((prev) => ({
+      ...prev,
+      open: false
+    }));
+  };
+
+  const renderMessageDialog = () => (
+    <Dialog
+      open={messageBox.open}
+      onClose={closeMessageBox}
+      maxWidth="xs"
+      fullWidth
+      sx={{ zIndex: 20000 }}
+      BackdropProps={{
+        sx: { zIndex: 19999 }
+      }}
+      PaperProps={{
+        sx: { zIndex: 20001 }
+      }}
+    >
+      <DialogContent sx={{ pt: 3 }}>
+        <Alert severity={messageBox.severity} sx={{ mb: 2 }}>
+          {messageBox.title}
+        </Alert>
+        <Typography>{messageBox.message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button variant="contained" onClick={closeMessageBox}>
+          OK
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const handleCopyReceiptImage = async () => {
+    if (!receiptViewerSrc) {
+      return;
+    }
+
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("Clipboard image copy is not supported by this browser.");
+      }
+
+      const blob = await dataUrlToBlob(receiptViewerSrc);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [blob.type || "image/png"]: blob
+        })
+      ]);
+
+      showMessage("Receipt Image Copied", "The receipt image was copied to the clipboard.", "success");
+    } catch (err) {
+      console.error("COPY RECEIPT IMAGE ERROR:", err);
+      showMessage(
+        "Copy Failed",
+        "Browser did not allow copying the image. Click the image preview and use right-click or long-press to copy/save it.",
+        "warning"
+      );
+    }
   };
 
   const loadTechnicians = async () => {
@@ -2763,7 +2842,7 @@ function ClientList() {
   const revokeEntryReceiptUrls = (entries = []) => {
     entries.forEach((entry) => {
       const url = String(entry?.receiptImageUrl || "").trim();
-      if (url) {
+      if (url && url.startsWith("blob:")) {
         try {
           URL.revokeObjectURL(url);
         } catch (error) {
@@ -2945,7 +3024,11 @@ function ClientList() {
       setNewClient(getDefaultNewClientForm());
     } catch (err) {
       console.error(err);
-      showMessage("Save Failed", "Failed to save client.", "error");
+      showMessage(
+        "Save Failed",
+        err.response?.data?.error || "Failed to save client.",
+        "error"
+      );
     }
   };
 
@@ -3267,7 +3350,9 @@ function ClientList() {
       reference: String(entry?.reference || "").trim(),
       receiptAmount: Number(entry?.receiptAmount || entry?.amount || 0),
       transferDate: String(entry?.transferDate || "").trim(),
-      receiverLast4: String(entry?.receiverLast4 || "").trim()
+      receiverLast4: String(entry?.receiverLast4 || "").trim(),
+      receiptImageUrl: String(entry?.receiptImageUrl || "").trim(),
+      receiptImageDataUrl: String(entry?.receiptImageDataUrl || "").trim()
     }))
     .filter((entry) => entry.method && entry.amount > 0);
   const totalPaymentReceived = normalizedPaymentEntries.reduce(
@@ -3630,6 +3715,15 @@ function ClientList() {
       });
       const transactionDayValue = String(transactionDateTime.getDate()).padStart(2, "0");
       const transactionYearValue = String(transactionDateTime.getFullYear());
+      const reconnectPlanNetPlan =
+        getPlanSpeed(reconnectPlan) ||
+        (isDisconnectedPlanValue(selectedClient.PreviousNetPlan)
+          ? ""
+          : selectedClient.PreviousNetPlan) ||
+        getPlanName(reconnectPlan) ||
+        selectedClient.NetPlan ||
+        "";
+      const transactionNetPlan = reconnectPlan ? reconnectPlanNetPlan : selectedClient.NetPlan || "";
 
       const transactionPayload = {
         ClientId: selectedClient._id,
@@ -3638,7 +3732,7 @@ function ClientList() {
         ClientName: selectedClient.ClientName || "",
         Address: selectedClient.Address || "",
         ConnectionType: selectedClient.ConnectionType || "FIBER OPTIC",
-        NetPlan: selectedClient.NetPlan || "",
+        NetPlan: transactionNetPlan,
         ServerLocation: selectedClient.ServerLocation || "",
         Type: "Payment",
         PaymentMethod: topLevelPaymentMethod,
@@ -3706,6 +3800,7 @@ function ClientList() {
             GCashTransferDate:
               entry.method === "GCASH" ? String(entry.transferDate || "").trim() : "",
             ReceiverLast4: entry.method === "CASH" ? "" : String(entry.receiverLast4 || "").trim(),
+            ReceiptImage: entry.method === "CASH" ? "" : String(entry.receiptImageDataUrl || "").trim(),
             DeclaredBy: createdByName || createdById,
             DeclaredById: createdById,
             TransactionDate: transactionDateTime,
@@ -3724,6 +3819,14 @@ function ClientList() {
       createdEarningIds = earningResponses
         .map((response) => response?.data?._id)
         .filter(Boolean);
+      const shouldOpenReceiptImageAfterSave =
+        normalizedPaymentEntries.length > 0 &&
+        normalizedPaymentEntries.every((entry) => entry.method !== "CASH");
+      const savedReceiptImageSource = shouldOpenReceiptImageAfterSave
+        ? normalizedPaymentEntries
+            .map((entry) => getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl))
+            .find(Boolean)
+        : "";
 
       await API.put(
         `/clients/${selectedClient._id}`,
@@ -3787,6 +3890,10 @@ function ClientList() {
         receiptConfig: receiptPrintConfig
       };
       handleClosePaymentModal();
+      if (savedReceiptImageSource) {
+        setReceiptViewerSrc(savedReceiptImageSource);
+        setReceiptPreviewOpen(true);
+      }
 
       try {
         const { data: smsResult } = await API.post("/sms/send-payment-received", {
@@ -4411,6 +4518,7 @@ function ClientList() {
 
           {renderClientFormActions()}
         </Paper>
+        {renderMessageDialog()}
       </Box>
     );
   }
@@ -5995,12 +6103,12 @@ function ClientList() {
                         />
 
                         <Box sx={{ display: "flex", alignItems: "center", minHeight: 40 }}>
-                          {entry.receiptImageUrl ? (
+                          {entry.receiptImageUrl || entry.receiptImageDataUrl ? (
                             <Button
                               variant="text"
                               size="small"
                               onClick={() => {
-                                setReceiptViewerSrc(entry.receiptImageUrl);
+                                setReceiptViewerSrc(getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl));
                                 setReceiptPreviewOpen(true);
                               }}
                               sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
@@ -6390,12 +6498,12 @@ function ClientList() {
                         />
 
                         <Box sx={{ display: "flex", alignItems: "center", minHeight: 40 }}>
-                          {entry.receiptImageUrl ? (
+                          {entry.receiptImageUrl || entry.receiptImageDataUrl ? (
                             <Button
                               variant="text"
                               size="small"
                               onClick={() => {
-                                setReceiptViewerSrc(entry.receiptImageUrl);
+                                setReceiptViewerSrc(getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl));
                                 setReceiptPreviewOpen(true);
                               }}
                               sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
@@ -6518,39 +6626,20 @@ function ClientList() {
             />
           )}
         </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={messageBox.open}
-        onClose={() =>
-          setMessageBox((prev) => ({
-            ...prev,
-            open: false
-          }))
-        }
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogContent sx={{ pt: 3 }}>
-          <Alert severity={messageBox.severity} sx={{ mb: 2 }}>
-            {messageBox.title}
-          </Alert>
-          <Typography>{messageBox.message}</Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
+        <DialogActions sx={{ px: 2.5, py: 2, backgroundColor: "#f8fafc" }}>
           <Button
             variant="contained"
-            onClick={() =>
-              setMessageBox((prev) => ({
-                ...prev,
-                open: false
-              }))
-            }
+            startIcon={<ContentCopyIcon />}
+            onClick={handleCopyReceiptImage}
+            disabled={!receiptViewerSrc}
+            sx={{ textTransform: "none", fontWeight: 700 }}
           >
-            OK
+            Copy Image
           </Button>
         </DialogActions>
       </Dialog>
+
+      {renderMessageDialog()}
 
       <Dialog
         open={smsConfirmDialog.open}
@@ -6970,11 +7059,12 @@ function ClientList() {
                                 <TableRow>
                                   <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
                                   <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
-                                  <TableCell sx={{ fontWeight: 700 }}>Reference</TableCell>
-                                  <TableCell sx={{ fontWeight: 700 }}>Transfer Date</TableCell>
-                                  <TableCell sx={{ fontWeight: 700 }}>Receiver Last 4</TableCell>
-                                  <TableCell sx={{ fontWeight: 700 }}>Verified</TableCell>
-                                </TableRow>
+                                    <TableCell sx={{ fontWeight: 700 }}>Reference</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Transfer Date</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Receiver Last 4</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Receipt</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Verified</TableCell>
+                                  </TableRow>
                               </TableHead>
                               <TableBody>
                                 {earningRows.map((earningRow, index) => (
@@ -6986,9 +7076,26 @@ function ClientList() {
                                     <TableCell>
                                       {earningRow.MOPRef || earningRow.ReferenceNumber || earningRow.Invoice || "-"}
                                     </TableCell>
-                                    <TableCell>{earningRow.TransferDate || "-"}</TableCell>
-                                    <TableCell>{earningRow.ReceiverLast4 || "-"}</TableCell>
-                                    <TableCell
+                                      <TableCell>{earningRow.TransferDate || "-"}</TableCell>
+                                      <TableCell>{earningRow.ReceiverLast4 || "-"}</TableCell>
+                                      <TableCell>
+                                        {earningRow.ReceiptImage ? (
+                                          <Button
+                                            variant="text"
+                                            size="small"
+                                            onClick={() => {
+                                              setReceiptViewerSrc(getReceiptImageSource(earningRow.ReceiptImage));
+                                              setReceiptPreviewOpen(true);
+                                            }}
+                                            sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
+                                          >
+                                            View
+                                          </Button>
+                                        ) : (
+                                          "-"
+                                        )}
+                                      </TableCell>
+                                      <TableCell
                                       sx={{
                                         fontWeight: 700,
                                         color: earningRow.Verified ? "#15803d" : "#b45309"
