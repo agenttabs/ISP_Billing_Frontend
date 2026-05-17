@@ -179,6 +179,247 @@ const createReceiptLine = (label, value, width = 32) => {
   return `${safeLabel}${" ".repeat(gap)}${safeValue}`;
 };
 
+const wrapReceiptText = (value, maxLength = 48) => {
+  const words = String(value || "-").replace(/\s+/g, " ").trim().split(" ");
+  const lines = [];
+  let current = "";
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxLength) {
+      current = next;
+      return;
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+    current = word;
+  });
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines.length ? lines : ["-"];
+};
+
+const createPaymentReceiptImage = (receiptData) => {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  const config = receiptData?.receiptConfig || defaultReceiptPrintConfig;
+  const paymentRows = Array.isArray(receiptData?.paymentBreakdown)
+    ? receiptData.paymentBreakdown
+    : [];
+  const rows = paymentRows.length
+    ? paymentRows
+    : [{ Method: receiptData?.paymentMethod || "-", Amount: receiptData?.amountPaid || 0 }];
+  const width = 640;
+  const paddingX = 56;
+  const lineHeight = 30;
+  const dividerHeight = 34;
+  const lines = [
+    { type: "center", text: config.CompanyName || "DNS NETWORKS", size: 30, weight: 800 },
+    { type: "center", text: config.ReceiptTitle || "Official Payment Receipt", size: 22, weight: 700 }
+  ];
+
+  if (config.ReceiptSubtitle) {
+    lines.push({ type: "center", text: config.ReceiptSubtitle, size: 18, weight: 600 });
+  }
+
+  lines.push(
+    { type: "divider" },
+    { type: "row", label: "Receipt No.", value: receiptData?.paymentReceipt || "-" },
+    { type: "row", label: "Date", value: receiptData?.paymentDate || "-" },
+    { type: "row", label: "Client", value: fitReceiptText(receiptData?.clientName || "-", 28) },
+    { type: "row", label: "Account", value: fitReceiptText(receiptData?.accountName || "-", 28) }
+  );
+
+  if (config.ShowContactNumber) {
+    lines.push({ type: "row", label: "Contact", value: receiptData?.contactNumber || "-" });
+  }
+
+  if (config.ShowSubscriptionCover) {
+    lines.push(
+      { type: "label", text: "Subscription Cover", weight: 700 },
+      ...wrapReceiptText(receiptData?.subscriptionCover || "-", 48).map((text) => ({
+        type: "text",
+        text
+      }))
+    );
+  }
+
+  lines.push(
+    { type: "divider" },
+    { type: "row", label: "Payment Mode", value: receiptData?.paymentMethod || "-" }
+  );
+
+  if (config.ShowReference) {
+    lines.push({
+      type: "row",
+      label: "Reference",
+      value: fitReceiptText(receiptData?.reference || "-", 28)
+    });
+  }
+
+  lines.push({ type: "divider" });
+
+  rows.forEach((entry) => {
+    lines.push({
+      type: "row",
+      label: entry.Method || "-",
+      value: `PHP ${formatReceiptAmount(entry.Amount || 0)}`,
+      weight: 800,
+      valueWeight: 800
+    });
+
+    if (entry.Reference) {
+      lines.push({
+        type: "row",
+        label: "Ref",
+        value: fitReceiptText(entry.Reference, 30),
+        size: 17,
+        weight: 500,
+        valueWeight: 500
+      });
+    }
+  });
+
+  lines.push(
+    { type: "divider" },
+    {
+      type: "row",
+      label: "Additional",
+      value: `PHP ${formatReceiptAmount(receiptData?.additionalCharge || 0)}`
+    },
+    {
+      type: "row",
+      label: "Discount",
+      value: `PHP ${formatReceiptAmount(receiptData?.discount || 0)}`
+    },
+    {
+      type: "row",
+      label: "Total Paid",
+      value: `PHP ${formatReceiptAmount(receiptData?.totalAmountToPay || receiptData?.amountPaid || 0)}`,
+      size: 22,
+      weight: 800,
+      valueWeight: 800
+    },
+    { type: "divider" }
+  );
+
+  if (config.ShowCreatedBy) {
+    lines.push({ type: "text", text: `Received by: ${receiptData?.createdBy || "-"}` });
+  }
+
+  lines.push(
+    { type: "text", text: `Notes: ${fitReceiptText(receiptData?.notes || "-", 44)}` },
+    { type: "divider" },
+    {
+      type: "center",
+      text: config.FooterNote || "Thank you for your payment.",
+      size: 20,
+      weight: 800
+    }
+  );
+
+  const height =
+    42 +
+    lines.reduce(
+      (total, line) => total + (line.type === "divider" ? dividerHeight : lineHeight),
+      0
+    ) +
+    44;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    return "";
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(-Math.PI / 7);
+  ctx.fillStyle = "rgba(15, 23, 42, 0.055)";
+  ctx.font = "900 58px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("DNS NETWORKS", 0, 0);
+  ctx.restore();
+
+  const drawText = (text, x, y, options = {}) => {
+    ctx.fillStyle = options.color || "#000000";
+    ctx.font = `${options.weight || 500} ${options.size || 20}px "Courier New", Consolas, monospace`;
+    ctx.textAlign = options.align || "left";
+    ctx.fillText(String(text || ""), x, y);
+  };
+
+  const drawDivider = (y) => {
+    ctx.save();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([7, 5]);
+    ctx.beginPath();
+    ctx.moveTo(paddingX, y);
+    ctx.lineTo(width - paddingX, y);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawRow = (label, value, y, options = {}) => {
+    drawText(label, paddingX, y, {
+      size: options.size || 18,
+      weight: options.weight || 500,
+      color: options.color || "#000000"
+    });
+    drawText(value || "-", width - paddingX, y, {
+      size: options.valueSize || options.size || 18,
+      weight: options.valueWeight || options.weight || 600,
+      color: options.color || "#000000",
+      align: "right"
+    });
+  };
+
+  let y = 58;
+  lines.forEach((line) => {
+    if (line.type === "divider") {
+      drawDivider(y);
+      y += dividerHeight;
+      return;
+    }
+
+    if (line.type === "center") {
+      drawText(line.text, width / 2, y, {
+        size: line.size || 20,
+        weight: line.weight || 600,
+        align: "center"
+      });
+      y += lineHeight;
+      return;
+    }
+
+    if (line.type === "row") {
+      drawRow(line.label, line.value, y, line);
+      y += lineHeight;
+      return;
+    }
+
+    drawText(line.text, paddingX, y, {
+      size: line.size || 18,
+      weight: line.weight || 500
+    });
+    y += lineHeight;
+  });
+
+  return canvas.toDataURL("image/png");
+};
+
 const buildEscPosReceiptData = (receiptData) => {
   const {
     clientName,
@@ -3510,6 +3751,20 @@ function ClientList() {
     openPaymentReceiptPrint(receiptWindow, receiptPayload);
   };
 
+  const handleOpenPaymentHistoryEReceipt = async (row) => {
+    const latestReceiptConfig = await loadReceiptPrintConfig();
+    const receiptPayload = createReceiptPayloadFromHistoryRow(row, latestReceiptConfig);
+    const generatedReceiptImage = createPaymentReceiptImage(receiptPayload);
+
+    if (!generatedReceiptImage) {
+      showMessage("eReceipt Failed", "Unable to generate the eReceipt image.", "error");
+      return;
+    }
+
+    setReceiptViewerSrc(generatedReceiptImage);
+    setReceiptPreviewOpen(true);
+  };
+
   const handleSavePayment = async () => {
     if (paymentSaving) {
       return;
@@ -3819,14 +4074,9 @@ function ClientList() {
       createdEarningIds = earningResponses
         .map((response) => response?.data?._id)
         .filter(Boolean);
-      const shouldOpenReceiptImageAfterSave =
+      const shouldOpenGeneratedReceiptAfterSave =
         normalizedPaymentEntries.length > 0 &&
         normalizedPaymentEntries.every((entry) => entry.method !== "CASH");
-      const savedReceiptImageSource = shouldOpenReceiptImageAfterSave
-        ? normalizedPaymentEntries
-            .map((entry) => getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl))
-            .find(Boolean)
-        : "";
 
       await API.put(
         `/clients/${selectedClient._id}`,
@@ -3890,9 +4140,13 @@ function ClientList() {
         receiptConfig: receiptPrintConfig
       };
       handleClosePaymentModal();
-      if (savedReceiptImageSource) {
-        setReceiptViewerSrc(savedReceiptImageSource);
-        setReceiptPreviewOpen(true);
+
+      if (shouldOpenGeneratedReceiptAfterSave) {
+        const generatedReceiptImage = createPaymentReceiptImage(receiptPayload);
+        if (generatedReceiptImage) {
+          setReceiptViewerSrc(generatedReceiptImage);
+          setReceiptPreviewOpen(true);
+        }
       }
 
       try {
@@ -6957,6 +7211,7 @@ function ClientList() {
                       <TableCell sx={{ fontWeight: 700 }}>Total Amount</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Balance</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 84 }}>eReceipt</TableCell>
                       <TableCell sx={{ fontWeight: 700, width: 84 }}>Reprint</TableCell>
                       {isAdminUser ? (
                         <TableCell sx={{ fontWeight: 700, width: 84 }}>Delete</TableCell>
@@ -6966,7 +7221,7 @@ function ClientList() {
                 <TableBody>
                   {paymentHistoryRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={isAdminUser ? 14 : 13} align="center">
+                      <TableCell colSpan={isAdminUser ? 15 : 14} align="center">
                         No payment history found.
                       </TableCell>
                     </TableRow>
@@ -7015,6 +7270,21 @@ function ClientList() {
                         <TableCell>PHP {Number(row.Balance || 0).toLocaleString()}</TableCell>
                         <TableCell>{row.CreatedBy || row.CreatedById || "-"}</TableCell>
                         <TableCell>
+                          <Tooltip title="Open eReceipt">
+                            <span>
+                              <IconButton
+                                color="success"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleOpenPaymentHistoryEReceipt(row);
+                                }}
+                              >
+                                <ContentCopyIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell>
                           <Tooltip title="Reprint Receipt">
                             <span>
                               <IconButton
@@ -7050,7 +7320,7 @@ function ClientList() {
                       </TableRow>,
                       earningRows.length && isExpanded ? (
                         <TableRow key={`${historyRowKey}-earnings`}>
-                          <TableCell colSpan={isAdminUser ? 14 : 13} sx={{ backgroundColor: "#f8fafc", py: 2 }}>
+                          <TableCell colSpan={isAdminUser ? 15 : 14} sx={{ backgroundColor: "#f8fafc", py: 2 }}>
                             <Typography sx={{ fontWeight: 700, color: "#0f172a", mb: 1 }}>
                               Payment Entries
                             </Typography>

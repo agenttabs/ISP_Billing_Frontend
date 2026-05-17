@@ -29,6 +29,7 @@ import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalance
 import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
 import AccountBalanceOutlinedIcon from "@mui/icons-material/AccountBalanceOutlined";
 import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
+import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import API from "../api/api";
 import { useAuth } from "../context/auth.context";
 import PageHeader from "../layout/PageHeader";
@@ -143,6 +144,21 @@ const statCards = [
     dialogTitle: "Cash Payment Today",
     emptyMessage: "No cash payment found for today.",
     listType: "collection"
+  },
+  {
+    group: "Collection Today",
+    key: "expenseToday",
+    countKey: "expenseTodayRecords",
+    title: "Expense Today",
+    icon: <ReceiptLongOutlinedIcon />,
+    color: "#dc2626",
+    format: "currency",
+    clickable: true,
+    endpoint: "/dashboard/expenses-today",
+    dialogTitle: "Expense Today",
+    emptyMessage: "No expense found for today.",
+    listType: "expense",
+    countLabel: "expense record(s)"
   }
 ];
 
@@ -280,12 +296,16 @@ export default function DashboardPage() {
         const [
           dashboardSummaryResponse,
           earningsResponse,
+          expenseTodayResponse,
           disconnectionResponse,
           dueTodayResponse,
           pastDueResponse
         ] = await Promise.all([
           userType === "CASHIER" ? Promise.resolve({ data: {} }) : API.get("/dashboard/summary"),
           userType === "CASHIER" ? API.get("/earnings") : Promise.resolve({ data: [] }),
+          userType === "ADMIN" || userType === "CASHIER"
+            ? API.get("/dashboard/expenses-today")
+            : Promise.resolve({ data: { amount: 0, total: 0 } }),
           userType === "CASHIER" ? API.get("/dashboard/disconnection-today") : Promise.resolve({ data: { total: 0 } }),
           userType === "CASHIER" ? API.get("/dashboard/due-today") : Promise.resolve({ data: { total: 0 } }),
           userType === "CASHIER" ? API.get("/dashboard/past-due-unpaid") : Promise.resolve({ data: { total: 0 } })
@@ -298,6 +318,8 @@ export default function DashboardPage() {
         setCashierEarningsRows(earningsRows);
         setSummary({
           ...dashboardSummary,
+          expenseToday: Number(expenseTodayResponse?.data?.amount || 0),
+          expenseTodayRecords: Number(expenseTodayResponse?.data?.total || 0),
           ...(userType === "CASHIER"
             ? {
                 ...buildCollectionSummaryFromEarnings(earningsRows),
@@ -417,13 +439,14 @@ export default function DashboardPage() {
                                     ? formatCurrency(summary?.[card.key] ?? 0)
                                     : summary?.[card.key] ?? 0}
                                 </Typography>
+                                {card.countKey ? (
+                                  <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#64748b" }}>
+                                    {summary?.[card.countKey] ?? 0} {card.countLabel || "client(s) paid"}
+                                  </Typography>
+                                ) : null}
                                 {card.clickable ? (
                                   <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#64748b" }}>
                                     Click to view list
-                                  </Typography>
-                                ) : card.countKey ? (
-                                  <Typography sx={{ mt: 0.75, fontSize: "0.76rem", color: "#64748b" }}>
-                                    {summary?.[card.countKey] ?? 0} client(s) paid
                                   </Typography>
                                 ) : null}
                               </Box>
@@ -469,7 +492,36 @@ export default function DashboardPage() {
             <Alert severity="info">{listEmptyMessage || "No client found."}</Alert>
           ) : (
             <Box sx={{ overflowX: "auto" }}>
-              {listDialogType === "collection" ? (
+              {listDialogType === "expense" ? (
+                <Table size="small" sx={{ minWidth: 860 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Log Date</TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Invoice</TableCell>
+                      <TableCell>Amount</TableCell>
+                      <TableCell>Docs</TableCell>
+                      <TableCell>In Charge</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {listRows.map((row) => (
+                      <TableRow key={row.rowId || row.invoice || row.name}>
+                        <TableCell>
+                          {row.logDate || (row.transactionDate ? new Date(row.transactionDate).toLocaleDateString("en-PH") : "-")}
+                        </TableCell>
+                        <TableCell>{row.name || "-"}</TableCell>
+                        <TableCell>{row.type || "-"}</TableCell>
+                        <TableCell>{row.invoice || "-"}</TableCell>
+                        <TableCell>{formatCurrency(row.amount)}</TableCell>
+                        <TableCell>{row.docs || "-"}</TableCell>
+                        <TableCell>{row.inCharge || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : listDialogType === "collection" ? (
                 <Table size="small" sx={{ minWidth: 920 }}>
                   <TableHead>
                     <TableRow>

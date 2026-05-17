@@ -20,9 +20,68 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import API from "../api/api";
+import { useAuth } from "../context/auth.context";
 import PageHeader from "../layout/PageHeader";
 
-const getTodayInputDate = () => new Date().toISOString().split("T")[0];
+const padDatePart = (value) => String(value).padStart(2, "0");
+
+const getTodayInputDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${padDatePart(now.getMonth() + 1)}-${padDatePart(now.getDate())}`;
+};
+
+const normalizeLogDateKey = (value) => {
+  if (!value) return "";
+
+  const text = String(value).trim();
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
+    const [year, month, day] = text.split("-");
+    return `${Number(year)}/${Number(month)}/${Number(day)}`;
+  }
+
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(text)) {
+    const [year, month, day] = text.split("/");
+    return `${Number(year)}/${Number(month)}/${Number(day)}`;
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}/${parsed.getMonth() + 1}/${parsed.getDate()}`;
+  }
+
+  return text;
+};
+
+const getTodayLogDateKey = () => normalizeLogDateKey(getTodayInputDate());
+
+const normalizeOwnerToken = (value) => String(value || "").trim().toLowerCase();
+
+const getUserOwnerTokens = (user) =>
+  [
+    user?.id,
+    user?._id,
+    user?.ID,
+    user?.username,
+    user?.Username,
+    user?.name,
+    user?.Name
+  ]
+    .map(normalizeOwnerToken)
+    .filter(Boolean);
+
+const isRowOwnedByUser = (row, user) => {
+  const userTokens = getUserOwnerTokens(user);
+  const rowTokens = [
+    row?.InChargeId,
+    row?.InCharge,
+    row?.CreatedById,
+    row?.CreatedBy
+  ]
+    .map(normalizeOwnerToken)
+    .filter(Boolean);
+
+  return rowTokens.some((token) => userTokens.includes(token));
+};
 
 const defaultForm = {
   Name: "",
@@ -64,6 +123,9 @@ const normalizeDateForInput = (value) => {
 };
 
 export default function ExpenseInput() {
+  const { user } = useAuth();
+  const userType = String(user?.type || "").toUpperCase();
+  const isCashier = userType === "CASHIER";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(defaultForm);
   const [editingId, setEditingId] = useState("");
@@ -91,12 +153,19 @@ export default function ExpenseInput() {
 
   const filteredRows = useMemo(() => {
     const keyword = String(search || "").trim().toLowerCase();
+    const scopedRows = isCashier
+      ? rows.filter(
+          (row) =>
+            normalizeLogDateKey(row.LogDate) === getTodayLogDateKey() &&
+            isRowOwnedByUser(row, user)
+        )
+      : rows;
 
     if (!keyword) {
-      return rows;
+      return scopedRows;
     }
 
-    return rows.filter((row) =>
+    return scopedRows.filter((row) =>
       [
         row.Name,
         row.Type,
@@ -109,7 +178,12 @@ export default function ExpenseInput() {
         .toLowerCase()
         .includes(keyword)
     );
-  }, [rows, search]);
+  }, [isCashier, rows, search, user]);
+
+  const canEditRow = (row) =>
+    !isCashier ||
+    (normalizeLogDateKey(row.LogDate) === getTodayLogDateKey() &&
+      isRowOwnedByUser(row, user));
 
   const resetForm = () => {
     setForm(defaultForm);
@@ -124,11 +198,16 @@ export default function ExpenseInput() {
       setError("");
       setSuccess("");
 
+      const payload = {
+        ...form,
+        LogDate: isCashier ? getTodayInputDate() : form.LogDate
+      };
+
       if (editingId) {
-        await API.put(`/expenses/${editingId}`, form);
+        await API.put(`/expenses/${editingId}`, payload);
         setSuccess("Expense updated successfully.");
       } else {
-        await API.post("/expenses", form);
+        await API.post("/expenses", payload);
         setSuccess("Expense saved successfully.");
       }
 
@@ -179,8 +258,12 @@ export default function ExpenseInput() {
     <Box>
       <Stack spacing={3}>
         <PageHeader
-          title="Expenses Input"
-          subtitle="Save operational and financial expense records into the Expenses collection."
+          title="Expense"
+          subtitle={
+            isCashier
+              ? "Cashier can only view and save today's own expense records."
+              : "Save operational and financial expense records."
+          }
           action={
             <Button
               variant="outlined"
@@ -242,13 +325,15 @@ export default function ExpenseInput() {
                 <TextField
                   label="Log Date"
                   type="date"
-                  value={form.LogDate}
+                  value={isCashier ? getTodayInputDate() : form.LogDate}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, LogDate: event.target.value }))
                   }
                   InputLabelProps={{ shrink: true }}
                   fullWidth
                   required
+                  disabled={isCashier}
+                  helperText={isCashier ? "Cashier date is locked to today." : " "}
                 />
               </Stack>
 
@@ -272,7 +357,7 @@ export default function ExpenseInput() {
                   disabled={loading}
                   sx={{ textTransform: "none", fontWeight: 700 }}
                 >
-                  {editingId ? "Update Expenses" : "Save Expenses"}
+                  {editingId ? "Update Expense" : "Save Expense"}
                 </Button>
                 <Button
                   type="button"
@@ -292,7 +377,7 @@ export default function ExpenseInput() {
           <CardContent sx={{ p: 3 }}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 1 }}>
-                Expenses Records
+                Expense Records
               </Typography>
               <TextField
                 label="Search"
@@ -336,12 +421,17 @@ export default function ExpenseInput() {
                       <TableCell>{row.Docs || "-"}</TableCell>
                       <TableCell>{row.InCharge || "-"}</TableCell>
                       <TableCell align="center">
-                        <IconButton color="primary" onClick={() => handleEdit(row)}>
-                          <EditOutlinedIcon />
-                        </IconButton>
-                        <IconButton color="error" onClick={() => handleDelete(row._id)}>
-                          <DeleteOutlineIcon />
-                        </IconButton>
+                        {canEditRow(row) ? (
+                          <IconButton color="primary" onClick={() => handleEdit(row)}>
+                            <EditOutlinedIcon />
+                          </IconButton>
+                        ) : null}
+                        {!isCashier ? (
+                          <IconButton color="error" onClick={() => handleDelete(row._id)}>
+                            <DeleteOutlineIcon />
+                          </IconButton>
+                        ) : null}
+                        {!canEditRow(row) && isCashier ? "-" : null}
                       </TableCell>
                     </TableRow>
                   ))

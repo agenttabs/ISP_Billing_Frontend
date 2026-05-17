@@ -5,6 +5,9 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
+  Chip,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Stack,
@@ -21,6 +24,56 @@ import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 
+const WEEK_DAYS = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY"
+];
+
+const dayLabels = {
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun"
+};
+
+const normalizeScheduleDays = (value) => {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((item) => item.trim());
+
+  return [...new Set(source.map((item) => String(item || "").trim().toUpperCase()))]
+    .filter((day) => WEEK_DAYS.includes(day));
+};
+
+const formatScheduleDays = (value) => {
+  const days = normalizeScheduleDays(value);
+  if (!days.length) {
+    return "No days assigned";
+  }
+  if (days.length === WEEK_DAYS.length) {
+    return "Every day";
+  }
+  return days.map((day) => dayLabels[day] || day).join(", ");
+};
+
+const getUserScheduleDays = (user) => {
+  const days = normalizeScheduleDays(user?.ScheduleDays ?? user?.scheduleDays);
+  if (!days.length && String(user?.Type || "").toUpperCase() === "CASHIER") {
+    return [...WEEK_DAYS];
+  }
+  return days;
+};
+
 const defaultForm = {
   name: "",
   username: "",
@@ -30,7 +83,8 @@ const defaultForm = {
   email: "",
   contact: "",
   salary: "",
-  restriction: "Default"
+  restriction: "Default",
+  scheduleDays: [...WEEK_DAYS]
 };
 
 export default function UserAccounts() {
@@ -59,8 +113,12 @@ export default function UserAccounts() {
 
     try {
       setLoading(true);
+      const payloadForm = {
+        ...form,
+        scheduleDays: normalizeScheduleDays(form.scheduleDays)
+      };
       if (editingId) {
-        const payload = { ...form };
+        const payload = { ...payloadForm };
         if (!String(payload.password || "").trim()) {
           delete payload.password;
         }
@@ -73,7 +131,7 @@ export default function UserAccounts() {
         );
         setSuccess("Account user updated successfully.");
       } else {
-        const { data } = await API.post("/auth/users", form);
+        const { data } = await API.post("/auth/users", payloadForm);
         setUsers((prev) => [...prev, data.user]);
         setSuccess("Account user added successfully.");
       }
@@ -102,10 +160,21 @@ export default function UserAccounts() {
       contact: user.Contact || "",
       salary: user.Salary || "",
       status: user.Status || "ACTIVE",
-      restriction: user.Restriction || "Default"
+      restriction: user.Restriction || "Default",
+      scheduleDays: getUserScheduleDays(user)
     });
     setError("");
     setSuccess("");
+  };
+
+  const handleScheduleDayToggle = (day) => {
+    setForm((prev) => {
+      const days = normalizeScheduleDays(prev.scheduleDays);
+      const nextDays = days.includes(day)
+        ? days.filter((item) => item !== day)
+        : [...days, day];
+      return { ...prev, scheduleDays: nextDays };
+    });
   };
 
   const handleCancelEdit = () => {
@@ -236,6 +305,65 @@ export default function UserAccounts() {
                 />
               </Stack>
 
+              {String(form.type || "").toUpperCase() === "CASHIER" ? (
+                <Box
+                  sx={{
+                    border: "1px solid #d7e3f2",
+                    borderRadius: 3,
+                    p: 2
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    justifyContent="space-between"
+                    spacing={1}
+                    sx={{ mb: 1 }}
+                  >
+                    <Box>
+                      <Typography sx={{ fontWeight: 700 }}>
+                        Cashier Weekly Schedule
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Cashier can login only on the selected weekday(s).
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() =>
+                          setForm((prev) => ({ ...prev, scheduleDays: [...WEEK_DAYS] }))
+                        }
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        onClick={() => setForm((prev) => ({ ...prev, scheduleDays: [] }))}
+                      >
+                        Clear
+                      </Button>
+                    </Stack>
+                  </Stack>
+                  <Stack direction="row" flexWrap="wrap" gap={1}>
+                    {WEEK_DAYS.map((day) => (
+                      <FormControlLabel
+                        key={day}
+                        control={
+                          <Checkbox
+                            checked={normalizeScheduleDays(form.scheduleDays).includes(day)}
+                            onChange={() => handleScheduleDayToggle(day)}
+                          />
+                        }
+                        label={dayLabels[day]}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              ) : null}
+
               <Box>
                 <Button
                   type="submit"
@@ -274,6 +402,7 @@ export default function UserAccounts() {
                   <TableCell>Username</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Schedule</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Contact</TableCell>
                   <TableCell align="center">Edit</TableCell>
@@ -287,6 +416,18 @@ export default function UserAccounts() {
                     <TableCell>{user.Username}</TableCell>
                     <TableCell>{user.Type}</TableCell>
                     <TableCell>{user.Status || "ACTIVE"}</TableCell>
+                    <TableCell>
+                      {String(user.Type || "").toUpperCase() === "CASHIER" ? (
+                        <Chip
+                          label={formatScheduleDays(getUserScheduleDays(user))}
+                          size="small"
+                          color={getUserScheduleDays(user).length ? "success" : "warning"}
+                          variant="outlined"
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
                     <TableCell>{user.Email || "-"}</TableCell>
                     <TableCell>{user.Contact || "-"}</TableCell>
                     <TableCell align="center">
