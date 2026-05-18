@@ -22,7 +22,7 @@ const defaultForm = {
   ReceiptTitle: "Official Payment Receipt",
   ReceiptSubtitle: "DNS NETWORKS",
   FooterNote: "Thank you for your payment.",
-  PreferredPrinterName: "DNS PRINTER",
+  PreferredPrinterName: "----------",
   EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,

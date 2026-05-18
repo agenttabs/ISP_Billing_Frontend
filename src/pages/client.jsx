@@ -106,6 +106,60 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+const MAX_RECEIPT_IMAGE_SIDE = 900;
+const MAX_RECEIPT_IMAGE_DATA_URL_LENGTH = 260000;
+
+const compressReceiptImageToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const scale = Math.min(
+          1,
+          MAX_RECEIPT_IMAGE_SIDE / Math.max(image.width || 1, image.height || 1)
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round((image.width || 1) * scale));
+        canvas.height = Math.max(1, Math.round((image.height || 1) * scale));
+
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        const qualities = [0.72, 0.62, 0.52, 0.42, 0.34];
+        let compressed = "";
+
+        for (const quality of qualities) {
+          compressed = canvas.toDataURL("image/jpeg", quality);
+          if (compressed.length <= MAX_RECEIPT_IMAGE_DATA_URL_LENGTH) {
+            break;
+          }
+        }
+
+        URL.revokeObjectURL(objectUrl);
+        resolve(compressed);
+      } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        reject(error);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to prepare receipt image."));
+    };
+
+    image.src = objectUrl;
+  });
+
 const dataUrlToBlob = async (dataUrl) => {
   const response = await fetch(dataUrl);
   return response.blob();
@@ -145,9 +199,9 @@ const defaultReceiptPrintConfig = {
   Name: "Default Thermal Receipt",
   CompanyName: "DNS NETWORKS",
   ReceiptTitle: "Official Payment Receipt",
-  ReceiptSubtitle: "For Xprinter / Thermal Printer",
+  ReceiptSubtitle: "",
   FooterNote: "Thank you for your payment.",
-  PreferredPrinterName: "Xprinter",
+  PreferredPrinterName: "",
   EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,
@@ -2754,7 +2808,9 @@ function ClientList() {
     setOcrMessage("Reading receipt...");
 
     try {
-      const receiptImageDataUrl = await fileToDataUrl(file);
+      const receiptImageDataUrl = await compressReceiptImageToDataUrl(file).catch(() =>
+        fileToDataUrl(file)
+      );
       const result = await Tesseract.recognize(file, "eng");
       const ocrText = result.data.text || "";
       const extractedRef = extractReferenceNumber(ocrText);
@@ -4281,7 +4337,7 @@ function ClientList() {
             name="Password"
             fullWidth
             value={newClient.Password || ""}
-            InputProps={{ readOnly: true }}
+            onChange={handleChange}
           />
 
           <Button
@@ -5212,7 +5268,7 @@ function ClientList() {
                   name="Password"
                   fullWidth
                   value={newClient.Password || ""}
-                  InputProps={{ readOnly: true }}
+                  onChange={handleChange}
                 />
 
                 <Button

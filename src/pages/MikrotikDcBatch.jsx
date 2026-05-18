@@ -47,6 +47,48 @@ const formatDateTime = (value) => {
   return date.toLocaleString("en-PH");
 };
 
+const getDateSortValue = (value) => {
+  if (!value || value === "-") return Number.MAX_SAFE_INTEGER;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return Number.MAX_SAFE_INTEGER;
+
+  return date.getTime();
+};
+
+const getRowDueDate = (row) => {
+  const directDueDate = String(row?.dueDate || "").trim();
+
+  if (directDueDate && directDueDate !== "-") {
+    return directDueDate;
+  }
+
+  const detailDueDate = String(row?.detail || "").match(/Due date\s+(\d{4}-\d{2}-\d{2})/i);
+  return detailDueDate?.[1] || "-";
+};
+
+const getRowDisconnectDate = (row) => {
+  const directDisconnectDate = String(row?.disconnectDate || "").trim();
+
+  if (directDisconnectDate && directDisconnectDate !== "-") {
+    return directDisconnectDate;
+  }
+
+  const detailDisconnectDate = String(row?.detail || "").match(/Disconnect date\s+(\d{4}-\d{2}-\d{2})/i);
+  return detailDisconnectDate?.[1] || "-";
+};
+
+const sortRowsByDueDate = (rows = []) =>
+  [...rows].sort((a, b) => {
+    const dueDateDiff = getDateSortValue(getRowDueDate(b)) - getDateSortValue(getRowDueDate(a));
+
+    if (dueDateDiff !== 0) {
+      return dueDateDiff;
+    }
+
+    return String(a?.accountName || "").localeCompare(String(b?.accountName || ""));
+  });
+
 const getResultChip = (value) => {
   const normalized = String(value || "").toUpperCase();
 
@@ -179,8 +221,10 @@ export default function MikrotikDcBatch() {
     setConfirmRunOpen(false);
   };
 
-  const visibleRows = (report?.rows || []).filter(
-    (row) => String(row?.result || "").toUpperCase() !== "ALREADY_DISCONNECTED"
+  const visibleRows = sortRowsByDueDate(
+    (report?.rows || []).filter(
+      (row) => String(row?.result || "").toUpperCase() !== "ALREADY_DISCONNECTED"
+    )
   );
   const hasRunnableRows = visibleRows.length > 0;
 
@@ -326,6 +370,8 @@ export default function MikrotikDcBatch() {
                       <TableCell sx={{ fontWeight: 700 }}>Auth</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Account Name</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Client Name</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Due Date</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Disconnect Date</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Old Profile</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Old NetPlan</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Next Plan</TableCell>
@@ -335,7 +381,7 @@ export default function MikrotikDcBatch() {
                   <TableBody>
                     {visibleRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} align="center">
+                        <TableCell colSpan={10} align="center">
                           No overdue non-bypass client needs a disconnect right now.
                         </TableCell>
                       </TableRow>
@@ -359,6 +405,8 @@ export default function MikrotikDcBatch() {
                             <TableCell>{row.authMode || "-"}</TableCell>
                             <TableCell>{row.accountName || "-"}</TableCell>
                             <TableCell>{row.clientName || "-"}</TableCell>
+                            <TableCell>{getRowDueDate(row)}</TableCell>
+                            <TableCell>{getRowDisconnectDate(row)}</TableCell>
                             <TableCell>{row.oldProfile || "-"}</TableCell>
                             <TableCell>{row.oldNetPlan || "-"}</TableCell>
                             <TableCell>{row.nextPlan || "-"}</TableCell>
