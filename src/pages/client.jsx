@@ -4663,9 +4663,9 @@ function ClientList() {
           />
 
           <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <DatePicker
-              label="Due Date"
-              disabled={editMode || !isAdminUser}
+              <DatePicker
+                label="Due Date"
+              disabled={!isAdminUser}
               value={
                 newClient.DueDate
                   ? dayjs(parseMMDDYYYYToISO(newClient.DueDate))
@@ -5596,7 +5596,7 @@ function ClientList() {
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <DatePicker
                     label="Due Date"
-                    disabled={editMode || !isAdminUser}
+                    disabled={!isAdminUser}
                     value={
                       newClient.DueDate
                         ? dayjs(parseMMDDYYYYToISO(newClient.DueDate))
