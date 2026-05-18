@@ -1428,6 +1428,7 @@ function ClientList() {
     AdditionalCharge: "",
     Discount: "",
     ContactNumber: "",
+    SendSms: true,
     ReconnectRequired: false,
     ReconnectAuthMode: "",
     ReconnectPlan: "",
@@ -2121,6 +2122,7 @@ function ClientList() {
       AdditionalCharge: "",
       Discount: "",
       ContactNumber: String(client.ContactNumber || ""),
+      SendSms: true,
       ReconnectRequired: Boolean(options.reconnectRequired),
       ReconnectAuthMode: reconnectAuthMode,
       ReconnectPlan: getPlanName(previousReconnectPlan) || "",
@@ -3471,6 +3473,7 @@ function ClientList() {
       AdditionalCharge: "",
       Discount: "",
       ContactNumber: "",
+      SendSms: true,
       ReconnectRequired: false,
       ReconnectAuthMode: "",
       ReconnectPlan: "",
@@ -4205,35 +4208,37 @@ function ClientList() {
         }
       }
 
-      try {
-        const { data: smsResult } = await API.post("/sms/send-payment-received", {
-          client: {
-            ClientName: selectedClient.ClientName || "",
-            AccountName: selectedClient.AccountName || "",
-            AccountNumber: selectedClient.AccountNumber || "",
-            ContactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || ""
-          },
-          amountPaid,
-          monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
-          subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
-          nextDueDate: nextDueDateIso
-        });
+      if (paymentForm.SendSms !== false) {
+        try {
+          const { data: smsResult } = await API.post("/sms/send-payment-received", {
+            client: {
+              ClientName: selectedClient.ClientName || "",
+              AccountName: selectedClient.AccountName || "",
+              AccountNumber: selectedClient.AccountNumber || "",
+              ContactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || ""
+            },
+            amountPaid,
+            monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
+            subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
+            nextDueDate: nextDueDateIso
+          });
 
-        if (!smsResult?.sent) {
-          showMessage(
-            "Payment Saved, SMS Skipped",
-            smsResult?.reason || smsResult?.response || "Payment was saved but the SMS was not sent.",
-            "warning"
-          );
-        }
-      } catch (smsErr) {
-        console.error("PAYMENT SMS ERROR:", smsErr.response?.data || smsErr.message);
+          if (!smsResult?.sent) {
+            showMessage(
+              "Payment Saved, SMS Skipped",
+              smsResult?.reason || smsResult?.response || "Payment was saved but the SMS was not sent.",
+              "warning"
+            );
+          }
+        } catch (smsErr) {
+          console.error("PAYMENT SMS ERROR:", smsErr.response?.data || smsErr.message);
           showMessage(
             "Payment Saved, SMS Failed",
             smsErr.response?.data?.error || "Payment was saved but the SMS request failed.",
             "warning"
           );
         }
+      }
 
       const latestReceiptConfig = await loadReceiptPrintConfig();
       receiptPayload.receiptConfig = latestReceiptConfig;
@@ -6119,6 +6124,43 @@ function ClientList() {
                   sx={compactFieldSx}
                   helperText={`Existing: ${selectedClient?.ContactNumber || "N/A"}`}
                 />
+
+                <Box
+                  sx={{
+                    width: "100%",
+                    maxWidth: 430,
+                    px: 2,
+                    py: 1.5,
+                    border: "1px solid #dbe4ee",
+                    borderRadius: 2,
+                    backgroundColor: paymentForm.SendSms === false ? "#f8fafc" : "#f0fdf4",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.5
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontSize: "0.86rem", fontWeight: 800, color: "#0f172a" }}>
+                      Send SMS
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.72rem", color: "#64748b" }}>
+                      {paymentForm.SendSms === false
+                        ? "OFF - client will not receive payment SMS."
+                        : "ON - client will receive payment SMS."}
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={paymentForm.SendSms !== false}
+                    onChange={(event) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        SendSms: event.target.checked
+                      }))
+                    }
+                    color="success"
+                  />
+                </Box>
               </Box>
             </Paper>
 
