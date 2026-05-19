@@ -1417,6 +1417,7 @@ function ClientList() {
   const [repairSmsTemplate, setRepairSmsTemplate] = useState(null);
   const [repairSaving, setRepairSaving] = useState(false);
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [refreshModeSaving, setRefreshModeSaving] = useState(false);
 
   const [newClient, setNewClient] = useState(getDefaultNewClientForm());
   const [dhcpLeaseOptions, setDhcpLeaseOptions] = useState([]);
@@ -3524,6 +3525,37 @@ function ClientList() {
     }
   };
 
+  const handleRefreshPppoeMode = async () => {
+    if (!selectedClient?._id) {
+      showMessage("No Client Selected", "Please select a client first.", "warning");
+      return;
+    }
+
+    if (selectedAuthMode !== "PPPOE") {
+      showMessage("Refresh Mode Not Available", "Refresh Mode is only available for PPPoE clients.", "warning");
+      return;
+    }
+
+    setRefreshModeSaving(true);
+    try {
+      const { data } = await API.post(`/clients/${selectedClient._id}/refresh-mode`);
+      showMessage(
+        "Refresh Mode Complete",
+        data?.message || "The active PPPoE connection was refreshed.",
+        "success"
+      );
+    } catch (err) {
+      console.error("REFRESH MODE ERROR:", err.response?.data || err.message);
+      showMessage(
+        "Refresh Mode Failed",
+        err.response?.data?.error || "Failed to remove the active PPPoE connection.",
+        "error"
+      );
+    } finally {
+      setRefreshModeSaving(false);
+    }
+  };
+
   const resetForm = () => {
     setNewClient(getDefaultNewClientForm());
   };
@@ -4820,6 +4852,23 @@ function ClientList() {
           }}
         >
           Pull OUT
+        </Button>
+      ) : null}
+      {editMode && selectedAuthMode === "PPPOE" ? (
+        <Button
+          variant="outlined"
+          color="info"
+          disabled={refreshModeSaving}
+          onClick={handleRefreshPppoeMode}
+          sx={{
+            px: 2.5,
+            py: 0.8,
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: 700
+          }}
+        >
+          {refreshModeSaving ? "Refreshing..." : "Refresh Mode"}
         </Button>
       ) : null}
       <Button
