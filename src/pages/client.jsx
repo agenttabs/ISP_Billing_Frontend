@@ -684,6 +684,12 @@ const looksLikeDateOrTimeReference = (value) => {
   return false;
 };
 
+const looksLikePhoneReference = (value) => {
+  const normalized = String(value || "").replace(/[^\d]/g, "");
+
+  return /^(?:63)?9\d{9}$/.test(normalized) || /^09\d{9}$/.test(normalized);
+};
+
 const parseMMDDYYYYToISO = (value) => {
   if (!value) return "";
 
@@ -2481,6 +2487,7 @@ function ClientList() {
       if (
         traceCandidate.length >= 4 &&
         /\d/.test(traceCandidate) &&
+        !looksLikePhoneReference(traceCandidate) &&
         !looksLikeDateOrTimeReference(traceCandidate)
       ) {
         return traceCandidate;
@@ -2497,6 +2504,7 @@ function ClientList() {
       if (
         referenceIdCandidate.length >= 6 &&
         /\d/.test(referenceIdCandidate) &&
+        !looksLikePhoneReference(referenceIdCandidate) &&
         !looksLikeDateOrTimeReference(referenceIdCandidate)
       ) {
         return referenceIdCandidate;
@@ -2526,6 +2534,7 @@ function ClientList() {
 
         if (
           candidate.length >= 6 &&
+          !looksLikePhoneReference(candidate) &&
           !looksLikeDateOrTimeReference(candidate)
         ) {
           return candidate;
@@ -2536,6 +2545,7 @@ function ClientList() {
       if (
         compactCandidate.length >= 6 &&
         /\d/.test(compactCandidate) &&
+        !looksLikePhoneReference(compactCandidate) &&
         !looksLikeDateOrTimeReference(compactCandidate)
       ) {
         return compactCandidate;
@@ -2543,6 +2553,32 @@ function ClientList() {
 
       return "";
     };
+
+    const gcashExpressSendLineIndex = lines.findIndex((line) =>
+      /\bref\s*no\.?\b/i.test(line)
+    );
+
+    if (gcashExpressSendLineIndex >= 0) {
+      const gcashReferenceChunk = [
+        lines[gcashExpressSendLineIndex],
+        lines[gcashExpressSendLineIndex + 1] || ""
+      ]
+        .join(" ")
+        .replace(/\bref\s*no\.?\s*[:#-]?\s*/i, "")
+        .replace(
+          /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*$/i,
+          ""
+        );
+      const gcashReferenceCandidate = gcashReferenceChunk.replace(/[^\d]/g, "").trim();
+
+      if (
+        gcashReferenceCandidate.length >= 8 &&
+        !looksLikePhoneReference(gcashReferenceCandidate) &&
+        !looksLikeDateOrTimeReference(gcashReferenceCandidate)
+      ) {
+        return gcashReferenceCandidate;
+      }
+    }
 
     for (let index = 0; index < lines.length; index += 1) {
       const currentLine = lines[index];
@@ -2619,6 +2655,7 @@ function ClientList() {
       const expressSendCandidate = expressSendRefMatch[1].replace(/[^\d]/g, "").trim();
       if (
         expressSendCandidate.length >= 6 &&
+        !looksLikePhoneReference(expressSendCandidate) &&
         !looksLikeDateOrTimeReference(expressSendCandidate)
       ) {
         return expressSendCandidate;
@@ -2628,7 +2665,12 @@ function ClientList() {
     const groupedDigitMatch = cleaned.match(/(?:\d[\s-]?){8,20}/g) || [];
     const groupedDigitReference = groupedDigitMatch
       .map((value) => value.replace(/[^\d]/g, "").trim())
-      .find((value) => value.length >= 8 && !looksLikeDateOrTimeReference(value));
+      .find(
+        (value) =>
+          value.length >= 8 &&
+          !looksLikePhoneReference(value) &&
+          !looksLikeDateOrTimeReference(value)
+      );
 
     if (groupedDigitReference) {
       return groupedDigitReference;
@@ -2649,7 +2691,16 @@ function ClientList() {
   };
 
   const extractAmount = (text) => {
-    const cleaned = text.replace(/,/g, "");
+    const raw = String(text || "");
+    const commaMoneyMatch = raw.match(
+      /\b(?:PHP|P|₱|â‚±)?\s*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{2})?)\b/i
+    );
+
+    if (commaMoneyMatch?.[1]) {
+      return commaMoneyMatch[1].replace(/,/g, "");
+    }
+
+    const cleaned = raw.replace(/,/g, "");
     const transferAmountMatch = cleaned.match(
       /(transfer\s*amount|total\s*amount(?:\s*sent)?)\s*[:#-]?\s*(php|p|₱)?\s*([0-9]+(?:\.[0-9]{2})?)/i
     );
@@ -2781,6 +2832,14 @@ function ClientList() {
 
   const detectPaymentMethodFromText = (text) => {
     const normalized = text.toLowerCase();
+
+    if (
+      /\bref\s*no\.?\b/i.test(text) &&
+      /(?:\+?63\s*9|09)[\d\s*?.-]{4,24}\d{4}/i.test(text) &&
+      /(total\s*amount\s*sent|amount)/i.test(text)
+    ) {
+      return "GCASH";
+    }
 
     if (
       normalized.includes("express send") &&
