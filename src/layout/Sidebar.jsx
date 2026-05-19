@@ -39,6 +39,7 @@ import {
   FactCheckOutlined,
   RouterOutlined,
   SettingsEthernetOutlined,
+  TuneOutlined,
   ShieldOutlined,
   LockResetOutlined,
   SettingsSuggestOutlined,
@@ -96,6 +97,12 @@ export default function Sidebar() {
       roles: ["ADMIN"]
     },
     {
+      text: "Pull Out",
+      path: "/reports/pull-out",
+      icon: <AssessmentOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
       text: "Audit",
       path: "/reports/audit-logs",
       icon: <HistoryOutlined />,
@@ -126,6 +133,12 @@ export default function Sidebar() {
       text: "Netplan",
       path: "/netplans-maintenance",
       icon: <RouterOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "System Settings",
+      path: "/system-settings",
+      icon: <TuneOutlined />,
       roles: ["ADMIN"]
     },
     {

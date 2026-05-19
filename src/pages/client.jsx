@@ -55,6 +55,7 @@ import BillingStatementContent from "../components/BillingStatementContent";
 import PageHeader from "../layout/PageHeader";
 import { useAuth } from "../context/auth.context";
 import { useClient } from "../context/client.context";
+import { DEFAULT_COMPANY_NAME, normalizeCompanyName } from "../utils/companyName";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REPAIR_SMS_TEMPLATE_TYPE = "smsRepairTech";
@@ -197,7 +198,7 @@ const toSalesInvoiceNumber = (value) => {
 
 const defaultReceiptPrintConfig = {
   Name: "Default Thermal Receipt",
-  CompanyName: "DNS NETWORKS",
+  CompanyName: DEFAULT_COMPANY_NAME,
   ReceiptTitle: "Official Payment Receipt",
   ReceiptSubtitle: "",
   FooterNote: "Thank you for your payment.",
@@ -264,6 +265,7 @@ const createPaymentReceiptImage = (receiptData) => {
   }
 
   const config = receiptData?.receiptConfig || defaultReceiptPrintConfig;
+  const companyName = normalizeCompanyName(config.CompanyName);
   const paymentRows = Array.isArray(receiptData?.paymentBreakdown)
     ? receiptData.paymentBreakdown
     : [];
@@ -275,7 +277,7 @@ const createPaymentReceiptImage = (receiptData) => {
   const lineHeight = 30;
   const dividerHeight = 34;
   const lines = [
-    { type: "center", text: config.CompanyName || "DNS NETWORKS", size: 30, weight: 800 },
+    { type: "center", text: companyName, size: 30, weight: 800 },
     { type: "center", text: config.ReceiptTitle || "Official Payment Receipt", size: 22, weight: 700 }
   ];
 
@@ -404,7 +406,7 @@ const createPaymentReceiptImage = (receiptData) => {
   ctx.fillStyle = "rgba(15, 23, 42, 0.055)";
   ctx.font = "900 58px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("DNS NETWORKS", 0, 0);
+  ctx.fillText(companyName, 0, 0);
   ctx.restore();
 
   const drawText = (text, x, y, options = {}) => {
@@ -501,7 +503,7 @@ const buildEscPosReceiptData = (receiptData) => {
   const lines = [
     "\x1B\x40",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.CompanyName || "DNS NETWORKS")}\n`,
+    `${fitReceiptText(normalizeCompanyName(config.CompanyName))}\n`,
     `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt")}\n`,
     config.ReceiptSubtitle
       ? `${fitReceiptText(config.ReceiptSubtitle, 32)}\n`
@@ -612,19 +614,6 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
       }
     } catch (error) {
       // Try the next candidate.
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    const manualPrinterName = window.prompt(
-      "Enter your Xprinter printer name for automatic receipt printing:",
-      preferredPrinterName || savedPrinterName || "Xprinter"
-    );
-
-    if (manualPrinterName) {
-      const printer = await qz.printers.find(manualPrinterName);
-      window.localStorage.setItem(RECEIPT_PRINTER_STORAGE_KEY, printer);
-      return printer;
     }
   }
 
@@ -799,7 +788,7 @@ const getClientInstallDate = (client) => {
 const getMonthKey = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
-const buildBillingPeriodOptions = (client) => {
+const buildBillingPeriodOptions = (client, disconnectAfterDueDays = 15) => {
   const installDate = getClientInstallDate(client);
   const start = new Date(installDate.getFullYear(), installDate.getMonth() + 1, 1, 12, 0, 0, 0);
   const today = new Date();
@@ -809,7 +798,15 @@ const buildBillingPeriodOptions = (client) => {
     : new Date(clientDueDate.getFullYear(), clientDueDate.getMonth(), 1, 12, 0, 0, 0);
   const nextDueAllowedDate = Number.isNaN(clientDueDate.getTime())
     ? null
-    : new Date(clientDueDate.getFullYear(), clientDueDate.getMonth(), clientDueDate.getDate() + 15, 0, 0, 0, 0);
+    : new Date(
+        clientDueDate.getFullYear(),
+        clientDueDate.getMonth(),
+        clientDueDate.getDate() + disconnectAfterDueDays,
+        0,
+        0,
+        0,
+        0
+      );
   const end =
     nextDueAllowedDate && today >= nextDueAllowedDate
       ? new Date(currentDueMonth.getFullYear(), currentDueMonth.getMonth() + 1, 1, 12, 0, 0, 0)
@@ -1141,7 +1138,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   <body>
     <div class="receipt">
       <div class="center">
-        <div class="title">${escapeHtml(config.CompanyName || "DNS NETWORKS")}</div>
+        <div class="title">${escapeHtml(normalizeCompanyName(config.CompanyName))}</div>
         <div>${escapeHtml(config.ReceiptTitle || "Official Payment Receipt")}</div>
         ${
           config.ReceiptSubtitle
@@ -1443,6 +1440,8 @@ function ClientList() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState("");
   const [dragActive, setDragActive] = useState(false);
+  const [disconnectAfterDueDays, setDisconnectAfterDueDays] = useState(15);
+  const [systemCompanyName, setSystemCompanyName] = useState(DEFAULT_COMPANY_NAME);
   const [receiptPrintConfig, setReceiptPrintConfig] = useState(defaultReceiptPrintConfig);
   const [messageBox, setMessageBox] = useState({
     open: false,
@@ -1545,19 +1544,48 @@ function ClientList() {
     }
   }, []);
 
-  const loadReceiptPrintConfig = async () => {
+  const loadReceiptPrintConfig = async (companyNameOverride = systemCompanyName) => {
     try {
       const { data } = await API.get("/print-receipt");
       const nextConfig = {
         ...defaultReceiptPrintConfig,
-        ...(data || {})
+        ...(data || {}),
+        CompanyName: normalizeCompanyName(companyNameOverride || data?.CompanyName)
       };
       setReceiptPrintConfig(nextConfig);
       return nextConfig;
     } catch (err) {
       console.error("PRINT RECEIPT CONFIG LOAD ERROR:", err);
-      setReceiptPrintConfig(defaultReceiptPrintConfig);
-      return defaultReceiptPrintConfig;
+      const fallbackConfig = {
+        ...defaultReceiptPrintConfig,
+        CompanyName: normalizeCompanyName(companyNameOverride)
+      };
+      setReceiptPrintConfig(fallbackConfig);
+      return fallbackConfig;
+    }
+  };
+
+  const loadSystemSettings = async () => {
+    try {
+      const { data } = await API.get("/system-settings");
+      const nextGraceDays = Number(data?.DisconnectAfterDueDays);
+      const nextCompanyName = normalizeCompanyName(data?.CompanyName);
+      setSystemCompanyName(nextCompanyName);
+      setReceiptPrintConfig((prev) => ({
+        ...prev,
+        CompanyName: nextCompanyName
+      }));
+      setDisconnectAfterDueDays(
+        Number.isFinite(nextGraceDays) && nextGraceDays >= 0 ? Math.floor(nextGraceDays) : 15
+      );
+    } catch (err) {
+      console.error("SYSTEM SETTINGS LOAD ERROR:", err);
+      setSystemCompanyName(DEFAULT_COMPANY_NAME);
+      setReceiptPrintConfig((prev) => ({
+        ...prev,
+        CompanyName: DEFAULT_COMPANY_NAME
+      }));
+      setDisconnectAfterDueDays(15);
     }
   };
 
@@ -1628,6 +1656,7 @@ function ClientList() {
   }, []);
 
   useEffect(() => {
+    loadSystemSettings();
     loadReceiptPrintConfig();
   }, []);
 
@@ -1702,7 +1731,7 @@ function ClientList() {
         (
           isDisconnectedPlan(selectedClient) ||
           Boolean(paymentForm.ReconnectRequired) ||
-          selectedClientOverdueDays > 15
+          selectedClientOverdueDays > disconnectAfterDueDays
         );
       const paymentNeedsDhcp =
         openPaymentModal &&
@@ -1964,8 +1993,8 @@ function ClientList() {
   const activeCount = Number(clientMeta?.activeCount || 0);
   const disconnectedCount = Number(clientMeta?.disconnectedCount || 0);
   const billingPeriodOptions = useMemo(
-    () => buildBillingPeriodOptions(billingPeriodDialog.client),
-    [billingPeriodDialog.client]
+    () => buildBillingPeriodOptions(billingPeriodDialog.client, disconnectAfterDueDays),
+    [billingPeriodDialog.client, disconnectAfterDueDays]
   );
 
   const handleRightClick = (event, client) => {
@@ -1987,7 +2016,7 @@ function ClientList() {
   const handleOpenBillingPeriodDialog = (client) => {
     if (!client) return;
 
-    const options = buildBillingPeriodOptions(client);
+    const options = buildBillingPeriodOptions(client, disconnectAfterDueDays);
     setSelectedClient(client);
     setBillingPeriodDialog({
       open: true,
@@ -2098,7 +2127,7 @@ function ClientList() {
     return Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
   };
 
-  const getDaysPastDisconnectionThreshold = (client, threshold = 15) =>
+  const getDaysPastDisconnectionThreshold = (client, threshold = disconnectAfterDueDays) =>
     Math.max(0, getClientOverdueDays(client) - threshold);
 
   const openPaymentModalForClient = async (client, options = {}) => {
@@ -2151,7 +2180,7 @@ function ClientList() {
       return;
     }
 
-    if (overdueDays > 15) {
+    if (overdueDays > disconnectAfterDueDays) {
       setOverdueDialog({
         open: true,
         client
@@ -2823,7 +2852,6 @@ function ClientList() {
         /maribank|instapay|transfer result/i.test(String(ocrText || ""))
           ? ""
           : extractReceiverLast4(ocrText);
-      const normalizedExtractedRef = String(extractedRef || "").trim().toUpperCase();
       const normalizedExtractedAmount = String(extractedAmount || "").trim();
 
       if (!normalizedExtractedAmount || Number(normalizedExtractedAmount) <= 0) {
@@ -2837,29 +2865,6 @@ function ClientList() {
         showMessage(
           "Receipt Amount Required",
           "Unable to detect the payment amount from the uploaded receipt. Please use a clearer image or enter it manually.",
-          "warning"
-        );
-        return;
-      }
-
-      if (
-        detectedMethod !== "CASH" &&
-        normalizedExtractedRef &&
-        paymentEntries.some(
-          (entry) =>
-            normalizePaymentLineMethod(entry?.method) !== "CASH" &&
-            String(entry?.reference || "").trim().toUpperCase() === normalizedExtractedRef
-        )
-      ) {
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-        }
-        setReceiptPreview("");
-        setOcrLoading(false);
-        setOcrMessage(`Duplicate reference not allowed: ${normalizedExtractedRef}`);
-        showMessage(
-          "Duplicate Reference Not Allowed",
-          `Reference ${normalizedExtractedRef} already exists in the current payment entries.`,
           "warning"
         );
         return;
@@ -3347,10 +3352,10 @@ function ClientList() {
         .toUpperCase();
       const overdueDays = getClientOverdueDays(selectedClient);
 
-      if (overdueDays > 15) {
+      if (overdueDays > disconnectAfterDueDays) {
         showMessage(
           "Update Not Allowed",
-          "You can't update this client because the due date is already more than 15 days overdue. Need to pay first before updating the client.",
+          `You can't update this client because the due date is already more than ${disconnectAfterDueDays} days overdue. Need to pay first before updating the client.`,
           "warning"
         );
         return;
@@ -3409,12 +3414,12 @@ function ClientList() {
       return;
     }
 
-    if (selectedAuthMode !== "IPOE") {
-      showMessage("Pull Out Not Available", "Pull OUT is available for IPOE clients only.", "warning");
+    if (!["IPOE", "PPPOE"].includes(selectedAuthMode)) {
+      showMessage("Pull Out Not Available", "Pull OUT is available for IPOE and PPPOE clients only.", "warning");
       return;
     }
 
-    if (!["HOLD", "NOT ACTIVE"].includes(modalModemStatus)) {
+    if (selectedAuthMode === "IPOE" && !["HOLD", "NOT ACTIVE"].includes(modalModemStatus)) {
       showMessage(
         "Pull Out Not Allowed",
         "Pull OUT is only allowed when the modem status is HOLD or NOT ACTIVE.",
@@ -3426,12 +3431,13 @@ function ClientList() {
     try {
       const todayText = dayjs().format("MM/DD/YYYY");
       const existingNote = String(newClient.Note || "").trim();
-      const pullOutNote = `Client pull out ${todayText}`;
+      const pullOutNote = `Pull out ${todayText} by billing`;
+      const isPppoePullOut = selectedAuthMode === "PPPOE";
 
       const payload = {
         ...newClient,
         MacAddress: "",
-        Profile: "disconnection",
+        Profile: isPppoePullOut ? "dc-putol" : "disconnection",
         NetPlan: "disconnection",
         AmountDue: 0,
         Status: "DISCONNECTED",
@@ -3448,7 +3454,7 @@ function ClientList() {
       handleCloseModal();
       setEditMode(false);
       setNewClient(getDefaultNewClientForm());
-      showMessage("Client Pulled Out", "The IPOE client has been pulled out successfully.", "success");
+      showMessage("Client Pulled Out", "The client has been pulled out successfully.", "success");
     } catch (err) {
       console.error("PULL OUT ERROR:", err.response?.data || err.message);
       showMessage(
@@ -3634,7 +3640,7 @@ function ClientList() {
       (
         isDisconnectedPlan(selectedClient) ||
         Boolean(paymentForm.ReconnectRequired) ||
-        paymentOverdueDays > 15
+        paymentOverdueDays > disconnectAfterDueDays
       );
   const rawPlanAmount = Number(selectedClient?.AmountDue ?? 0);
   const planAmount = paymentRequiresReconnectFlow
@@ -3665,6 +3671,7 @@ function ClientList() {
   const gcashPaymentAmount = normalizedPaymentEntries
     .filter((entry) => entry.method === "GCASH")
     .reduce((sum, entry) => sum + entry.amount, 0);
+  const hasCashPaymentEntry = normalizedPaymentEntries.some((entry) => entry.method === "CASH");
   const uniquePaymentMethods = [...new Set(normalizedPaymentEntries.map((entry) => entry.method))];
   const nonCashReferences = normalizedPaymentEntries
     .filter((entry) => entry.method !== "CASH" && entry.reference)
@@ -3800,6 +3807,11 @@ function ClientList() {
         return;
       } catch (printError) {
         console.error("PAYMENT HISTORY REPRINT ERROR:", printError.message || printError);
+        showMessage(
+          "Xprinter Not Detected",
+          "Opening the normal print popup because direct Xprinter printing is unavailable.",
+          "warning"
+        );
       }
     }
 
@@ -3880,20 +3892,6 @@ function ClientList() {
 
     if (invalidNonCashEntry) {
       showMessage("Payment Reference Required", `Please enter the reference for ${invalidNonCashEntry.method}.`, "warning");
-      return;
-    }
-
-    const duplicateReferenceInCurrentSave = normalizedPaymentEntries
-      .filter((entry) => entry.method !== "CASH" && entry.reference)
-      .map((entry) => entry.reference.toUpperCase())
-      .find((reference, index, refs) => refs.indexOf(reference) !== index);
-
-    if (duplicateReferenceInCurrentSave) {
-      showMessage(
-        "Duplicate Reference Not Allowed",
-        `Reference ${duplicateReferenceInCurrentSave} is already used in another payment entry in this same transaction.`,
-        "warning"
-      );
       return;
     }
 
@@ -4243,13 +4241,18 @@ function ClientList() {
       const latestReceiptConfig = await loadReceiptPrintConfig();
       receiptPayload.receiptConfig = latestReceiptConfig;
 
-      if (latestReceiptConfig?.EnablePrinting) {
+      if (latestReceiptConfig?.EnablePrinting && hasCashPaymentEntry) {
         try {
           if (latestReceiptConfig?.UseDirectPrint) {
             try {
               await tryAutoPrintToXprinter(receiptPayload);
             } catch (printError) {
               console.error("XPRINTER AUTO PRINT ERROR:", printError.message || printError);
+              showMessage(
+                "Xprinter Not Detected",
+                "Opening the normal print popup because direct Xprinter printing is unavailable.",
+                "warning"
+              );
               const receiptWindow =
                 typeof window !== "undefined"
                   ? window.open("", "_blank", "width=420,height=900")
@@ -4744,7 +4747,7 @@ function ClientList() {
       >
         Cancel
       </Button>
-      {editMode && selectedAuthMode === "IPOE" ? (
+      {editMode && ["IPOE", "PPPOE"].includes(selectedAuthMode) ? (
         <Button
           variant="outlined"
           color="warning"
@@ -5675,7 +5678,7 @@ function ClientList() {
           >
             Cancel
           </Button>
-          {editMode && selectedAuthMode === "IPOE" ? (
+          {editMode && ["IPOE", "PPPOE"].includes(selectedAuthMode) ? (
             <Button
               variant="outlined"
               color="warning"
@@ -7817,7 +7820,7 @@ function ClientList() {
 
         <DialogContent sx={{ p: 3 }}>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This client is already {getDaysPastDisconnectionThreshold(overdueDialog.client)} day(s) past the 15-day disconnection threshold.
+            This client is already {getDaysPastDisconnectionThreshold(overdueDialog.client)} day(s) past the {disconnectAfterDueDays}-day disconnection threshold.
           </Alert>
 
           <Typography sx={{ mb: 2, color: "#334155" }}>
@@ -7876,7 +7879,7 @@ function ClientList() {
 
         <DialogContent sx={{ p: 3 }}>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This client is already {getDaysPastDisconnectionThreshold(forcedOverdueDialog.client)} day(s) past the 15-day disconnection threshold.
+            This client is already {getDaysPastDisconnectionThreshold(forcedOverdueDialog.client)} day(s) past the {disconnectAfterDueDays}-day disconnection threshold.
           </Alert>
 
           <Typography sx={{ color: "#334155" }}>

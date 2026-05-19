@@ -29,12 +29,12 @@ const defaultTemplates = [
   {
     TYPE: "paymentreceived",
     Body:
-      "Hi @ClientName@, we have received the payment for your DNS NETWORKS bill. Thank you.\r\n\r\nAccount no. @AccountNumber@\r\nMonthly due: @MonthlyDue@\r\nSubscription cover: @SubscriptionCover@\r\nTotal amount paid: @AmountPaid@\r\nNext due date: @NextDueDate@\r\n\r\n**This is a system generated sms. Kindly message us for any concerns."
+      "Hi @ClientName@, we have received the payment for your @CompanyName@ bill. Thank you.\r\n\r\nAccount no. @AccountNumber@\r\nMonthly due: @MonthlyDue@\r\nSubscription cover: @SubscriptionCover@\r\nTotal amount paid: @AmountPaid@\r\nNext due date: @NextDueDate@\r\n\r\n**This is a system generated sms. Kindly message us for any concerns."
   },
   {
     TYPE: "paymentreminder",
     Body:
-      "Hi @ClientName@, we would like to remind that your DNS NETWORKS bill is due. Kindly settle thru any of our Gcash accounts: 09260218957 Ma**a Cr*****e N. or 09167700957 Mi****l N. or Maya: 09260218957 Ma**a Cr*****e N. to avoid disconnection.\r\n\r\nAccount no.: @AccountNumber@\r\nAmount due: @TotalAmountDue@\r\nDue date: @DueDate@\r\n**This is a system generated sms. Kindly message us for any concerns."
+      "Hi @ClientName@, we would like to remind that your @CompanyName@ bill is due. Kindly settle thru any of our Gcash accounts: 09260218957 Ma**a Cr*****e N. or 09167700957 Mi****l N. or Maya: 09260218957 Ma**a Cr*****e N. to avoid disconnection.\r\n\r\nAccount no.: @AccountNumber@\r\nAmount due: @TotalAmountDue@\r\nDue date: @DueDate@\r\n**This is a system generated sms. Kindly message us for any concerns."
   },
   {
     TYPE: "smsRepairTech",
@@ -49,6 +49,7 @@ const defaultForm = {
 };
 
 const availableTokens = [
+  "@CompanyName@",
   "@ClientName@",
   "@TechnicianName@",
   "@AccountName@",

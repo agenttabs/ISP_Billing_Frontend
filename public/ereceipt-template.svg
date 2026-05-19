@@ -11,6 +11,6 @@
     fill="#0f172a"
     opacity="0.055"
   >
-    DNS NETWORKS
+    {{CompanyName}}
   </text>
 </svg>

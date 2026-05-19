@@ -16,9 +16,10 @@ import {
 import PrintIcon from "@mui/icons-material/Print";
 import CloseIcon from "@mui/icons-material/Close";
 import IconButton from "@mui/material/IconButton";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName } from "../utils/companyName";
 
 export const formatCurrency = (value) =>
   `PHP ${Number(value || 0).toLocaleString("en-PH", {
@@ -238,6 +239,7 @@ export default function BillingStatementContent({
   onClose,
   onBack
 }) {
+  const [companyName, setCompanyName] = useState(DEFAULT_COMPANY_NAME);
   const statementRange = useMemo(() => {
     return getSelectedStatementRange(client, billingPeriod);
   }, [billingPeriod, client]);
@@ -278,6 +280,26 @@ export default function BillingStatementContent({
     Math.max(Number(client?.Balance || 0), 0) + previousDueBalance;
   const totalDue = monthlyDue + previousBalance;
 
+  useEffect(() => {
+    let mounted = true;
+
+    fetchSystemCompanyName()
+      .then((nextCompanyName) => {
+        if (mounted) {
+          setCompanyName(nextCompanyName);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCompanyName(DEFAULT_COMPANY_NAME);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const handleGeneratePdf = () => {
     if (!client) return;
 
@@ -300,7 +322,7 @@ export default function BillingStatementContent({
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("DNS NETWORKS", 18, 14);
+    doc.text(companyName, 18, 14);
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(statementTitle, 18, 22);
@@ -432,7 +454,7 @@ export default function BillingStatementContent({
 
       <Box sx={{ p: { xs: 3, md: 5 } }}>
         <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4 }, background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #60a5fa 100%)", color: "#fff", borderRadius: 4, mb: 3 }}>
-          <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>DNS NETWORKS</Typography>
+          <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>{companyName}</Typography>
           <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1, mt: 0.75 }}>{statementMonth}</Typography>
           <Typography sx={{ mt: 1, opacity: 0.9 }}>Billing Statement</Typography>
         </Box>

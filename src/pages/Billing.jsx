@@ -23,6 +23,7 @@ import autoTable from "jspdf-autotable";
 
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
+import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName } from "../utils/companyName";
 
 const formatCurrency = (value) =>
   `PHP ${Number(value || 0).toLocaleString("en-PH", {
@@ -84,6 +85,7 @@ export default function Billing() {
   const navigate = useNavigate();
   const [client, setClient] = useState(null);
   const [history, setHistory] = useState([]);
+  const [companyName, setCompanyName] = useState(DEFAULT_COMPANY_NAME);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -95,7 +97,10 @@ export default function Billing() {
         setLoading(true);
         setError("");
 
-        const clientsResponse = await API.get("/clients");
+        const [clientsResponse, nextCompanyName] = await Promise.all([
+          API.get("/clients"),
+          fetchSystemCompanyName().catch(() => DEFAULT_COMPANY_NAME)
+        ]);
         const matchedClient = (clientsResponse.data || []).find(
           (item) => String(item._id) === String(id)
         );
@@ -114,6 +119,7 @@ export default function Billing() {
 
         setClient(matchedClient);
         setHistory(historyResponse.data || []);
+        setCompanyName(nextCompanyName);
       } catch (err) {
         if (!mounted) return;
         setError(err.response?.data?.error || err.message || "Failed to load billing data.");
@@ -169,7 +175,7 @@ export default function Billing() {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text("DNS NETWORKS", 18, 14);
+    doc.text(companyName, 18, 14);
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(statementTitle, 18, 22);
@@ -367,7 +373,7 @@ export default function Billing() {
             >
               <Box>
                 <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>
-                  DNS NETWORKS
+                  {companyName}
                 </Typography>
                 <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1, mt: 0.75 }}>
                   {statementMonth}

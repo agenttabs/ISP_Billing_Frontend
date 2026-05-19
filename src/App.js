@@ -22,6 +22,7 @@ import MikrotikDcBatch from "./pages/MikrotikDcBatch";
 import NapLocation from "./pages/NapLocation";
 import NetplanMaintenance from "./pages/NetplanMaintenance";
 import PrintReceipt from "./pages/PrintReceipt";
+import PullOutReport from "./pages/PullOutReport";
 import ReportExpensesAndEarnings from "./pages/ReportExpensesAndEarnings";
 import ReportTransactions from "./pages/ReportTransactions";
 import RepairInformation from "./pages/RepairInformation";
@@ -29,6 +30,7 @@ import SMSBatchPrograms from "./pages/SMSBatchPrograms";
 import SMSGateway from "./pages/SMSGateway";
 import SMSRecepients from "./pages/SMSRecepients";
 import SystemDiagnostics from "./pages/SystemDiagnostics";
+import SystemSettings from "./pages/SystemSettings";
 import SystemLogs from "./pages/SystemLogs";
 import TechReport from "./pages/TechReport";
 import TransactionVerification from "./pages/TransactionVerification";
@@ -92,6 +94,7 @@ function App() {
               element={<ReportExpensesAndEarnings />}
             />
             <Route path="/reports/audit-logs" element={<SystemLogs />} />
+            <Route path="/reports/pull-out" element={<PullOutReport />} />
             <Route path="/account-users" element={<UserAccounts />} />
             <Route path="/sms-recepients" element={<SMSRecepients />} />
             <Route path="/sms-collection" element={<SMSGateway />} />
@@ -99,6 +102,7 @@ function App() {
             <Route path="/email-notification" element={<EmailNotification />} />
             <Route path="/netplans-maintenance" element={<NetplanMaintenance />} />
             <Route path="/print-receipt" element={<PrintReceipt />} />
+            <Route path="/system-settings" element={<SystemSettings />} />
             <Route path="/client-bypass" element={<ClientBypass />} />
             <Route path="/mikrotik-connections" element={<MikrotikConnection />} />
             <Route path="/mikrotik-checker" element={<MikrotikChecker />} />

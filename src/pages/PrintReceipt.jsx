@@ -15,12 +15,13 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
+import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName, normalizeCompanyName } from "../utils/companyName";
 
 const defaultForm = {
   Name: "Default Thermal Receipt",
-  CompanyName: "DNS NETWORKS",
+  CompanyName: DEFAULT_COMPANY_NAME,
   ReceiptTitle: "Official Payment Receipt",
-  ReceiptSubtitle: "DNS NETWORKS",
+  ReceiptSubtitle: "",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "----------",
   EnablePrinting: true,
@@ -156,10 +157,14 @@ export default function PrintReceipt() {
 
   const loadConfig = async () => {
     try {
-      const { data } = await API.get("/print-receipt");
+      const [{ data }, companyName] = await Promise.all([
+        API.get("/print-receipt"),
+        fetchSystemCompanyName().catch(() => DEFAULT_COMPANY_NAME)
+      ]);
       setForm((prev) => ({
         ...prev,
-        ...data
+        ...data,
+        CompanyName: normalizeCompanyName(companyName)
       }));
       setError("");
     } catch (err) {
