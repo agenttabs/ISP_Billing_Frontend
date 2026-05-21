@@ -195,6 +195,7 @@ export default function SMSBatchPrograms() {
         data?.reason ||
           `Batch run finished. Sent ${data?.sent || 0}, skipped ${data?.skipped || 0}.`
       );
+      loadPrograms();
     } catch (err) {
       setSuccess("");
       setError(err.response?.data?.error || "Failed to run SMS batch now.");
@@ -412,6 +413,8 @@ export default function SMSBatchPrograms() {
                   <TableCell>Offset</TableCell>
                   <TableCell>Send Time</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Last Run</TableCell>
+                  <TableCell>Last Summary</TableCell>
                   <TableCell>Message Preview</TableCell>
                   <TableCell align="right">Action</TableCell>
                 </TableRow>
@@ -419,7 +422,7 @@ export default function SMSBatchPrograms() {
               <TableBody>
                 {programs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={10} align="center">
                       No SMS batch programs found.
                     </TableCell>
                   </TableRow>
@@ -437,6 +440,18 @@ export default function SMSBatchPrograms() {
                           color={program.IsActive ? "success" : "default"}
                           size="small"
                         />
+                      </TableCell>
+                      <TableCell>{formatDateTime(program.LastRunAt)}</TableCell>
+                      <TableCell>
+                        <Typography
+                          sx={{
+                            maxWidth: 260,
+                            color: program.LastError ? "#b91c1c" : "#475569",
+                            fontWeight: program.LastError ? 700 : 500
+                          }}
+                        >
+                          {program.LastError || program.LastRunSummary || "No run history yet."}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography
