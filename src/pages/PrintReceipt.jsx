@@ -49,11 +49,46 @@ const formatReceiptAmount = (value) =>
     maximumFractionDigits: 2
   });
 
-const createReceiptLine = (label, value, width = 32) => {
+const THERMAL_RECEIPT_CHAR_WIDTH = 48;
+
+const createReceiptLine = (label, value, width = THERMAL_RECEIPT_CHAR_WIDTH) => {
   const safeLabel = fitReceiptText(label, width - 8);
   const safeValue = fitReceiptText(value, width - safeLabel.length - 1);
   const gap = Math.max(width - safeLabel.length - safeValue.length, 1);
   return `${safeLabel}${" ".repeat(gap)}${safeValue}`;
+};
+
+const wrapReceiptText = (value, maxLength = THERMAL_RECEIPT_CHAR_WIDTH) => {
+  const words = String(value || "-").replace(/\s+/g, " ").trim().split(" ");
+  const lines = [];
+  let current = "";
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxLength) {
+      current = next;
+      return;
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+    current = word;
+  });
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines.length ? lines : ["-"];
+};
+
+const createWrappedReceiptField = (label, value, width = THERMAL_RECEIPT_CHAR_WIDTH) => {
+  const wrappedLines = wrapReceiptText(value || "-", width);
+  return [
+    `${label}\n`,
+    ...wrappedLines.map((line) => `  ${line}\n`)
+  ];
 };
 
 const loadQzTrayScript = () =>
@@ -224,10 +259,10 @@ const buildTestEscPosReceiptData = (config) => {
   const lines = [
     "\x1B\x40",
     "\x1B\x61\x01",
-    `${fitReceiptText(normalizeCompanyName(config.CompanyName))}\n`,
-    `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt")}\n`,
-    config.ReceiptSubtitle ? `${fitReceiptText(config.ReceiptSubtitle, 32)}\n` : "",
-    "===============================\n",
+    `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    config.ReceiptSubtitle ? `${fitReceiptText(config.ReceiptSubtitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n` : "",
+    `${"=".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     "\x1B\x61\x00",
     `${createReceiptLine("Receipt No.", "PR-TEST-0001")}\n`,
     `${createReceiptLine("Invoice No.", "SI-TEST-0001")}\n`,
@@ -235,12 +270,15 @@ const buildTestEscPosReceiptData = (config) => {
     `${createReceiptLine("Client", "Juan Dela Cruz")}\n`,
     `${createReceiptLine("Account", "test-account")}\n`,
     config.ShowContactNumber ? `${createReceiptLine("Contact", "09167700957")}\n` : "",
-    config.ShowSubscriptionCover
-      ? `${createReceiptLine("Cover", "May 15, 2026 to June 14, 2026")}\n`
-      : "",
-    "-------------------------------\n",
+    ...(config.ShowSubscriptionCover
+      ? createWrappedReceiptField(
+          "Subscription Cover",
+          "Subscription covered from May 15, 2026 to June 14, 2026"
+        )
+      : []),
+    `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Payment Mode", "CASH/GCASH")}\n`,
-    "-------------------------------\n"
+    `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`
   ];
 
   paymentLines.forEach((line) => {
@@ -252,13 +290,13 @@ const buildTestEscPosReceiptData = (config) => {
   });
 
   lines.push(
-    "-------------------------------\n",
+    `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Total Paid", formatReceiptAmount(1500))}\n`,
-    "-------------------------------\n",
+    `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     config.ShowCreatedBy ? `${createReceiptLine("Received by", "admin")}\n` : "",
     "\n",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", 32)}\n`,
+    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     "\x1B\x64\x04",
     "\x1D\x56\x00"
   );
