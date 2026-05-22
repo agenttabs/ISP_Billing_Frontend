@@ -395,8 +395,9 @@ export default function PrintReceipt() {
         setError(
           err.response?.data?.error ||
             err.message ||
-            "Direct print failed. Opening browser print preview instead."
+            "Direct print failed. Please check QZ Tray, certificate, and printer name."
         );
+        return;
       }
     }
 

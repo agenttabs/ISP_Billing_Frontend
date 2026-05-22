@@ -4035,6 +4035,14 @@ function ClientList() {
         return;
       } catch (printError) {
         console.error("PAYMENT HISTORY REPRINT ERROR:", printError.message || printError);
+        showMessage(
+          "Direct Print Failed",
+          printError.response?.data?.error ||
+            printError.message ||
+            "Please check QZ Tray, certificate, and printer name.",
+          "warning"
+        );
+        return;
       }
     }
 
@@ -4471,11 +4479,13 @@ function ClientList() {
               await tryAutoPrintToXprinter(receiptPayload);
             } catch (printError) {
               console.error("XPRINTER AUTO PRINT ERROR:", printError.message || printError);
-              const receiptWindow =
-                typeof window !== "undefined"
-                  ? window.open("", "_blank", "width=420,height=900")
-                  : null;
-              openPaymentReceiptPrint(receiptWindow, receiptPayload);
+              showMessage(
+                "Payment Saved, Direct Print Failed",
+                printError.response?.data?.error ||
+                  printError.message ||
+                  "Please check QZ Tray, certificate, and printer name.",
+                "warning"
+              );
             }
           } else {
             const receiptWindow =
