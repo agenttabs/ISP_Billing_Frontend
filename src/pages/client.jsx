@@ -610,7 +610,16 @@ const configureQzSecurity = (qz) => {
   qz.security.setCertificatePromise((resolve, reject) => {
     API.get("/qz/certificate", { responseType: "text" })
       .then(({ data }) => resolve(data))
-      .catch(reject);
+      .catch((error) =>
+        reject(
+          new Error(
+            error.response?.data?.error ||
+              error.response?.data?.message ||
+              error.message ||
+              "Failed to load QZ certificate."
+          )
+        )
+      );
   });
 
   if (typeof qz.security.setSignatureAlgorithm === "function") {
@@ -620,7 +629,16 @@ const configureQzSecurity = (qz) => {
   qz.security.setSignaturePromise((request) => (resolve, reject) => {
     API.post("/qz/sign", { request })
       .then(({ data }) => resolve(data?.signature || data))
-      .catch(reject);
+      .catch((error) =>
+        reject(
+          new Error(
+            error.response?.data?.error ||
+              error.response?.data?.message ||
+              error.message ||
+              "Failed to sign QZ request."
+          )
+        )
+      );
   });
 
   qzSecurityConfigured = true;
