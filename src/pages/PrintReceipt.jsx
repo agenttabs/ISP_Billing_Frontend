@@ -187,6 +187,14 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
     ? ` Available printers: ${availablePrinters.join(", ")}.`
     : " No printers were returned by QZ Tray.";
 
+  const directPrinterName = String(preferredPrinterName || "").trim();
+  if (directPrinterName && directPrinterName !== "----------") {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(RECEIPT_PRINTER_STORAGE_KEY, directPrinterName);
+    }
+    return directPrinterName;
+  }
+
   throw new Error(`Xprinter printer was not found.${availableMessage}`);
 };
 
