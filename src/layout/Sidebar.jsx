@@ -80,7 +80,8 @@ export default function Sidebar() {
 
   const mainMenu = [
     { text: "Dashboard", path: "/", icon: <Dashboard />, roles: ["ADMIN", "CASHIER", "TECHNICIAN"] },
-    { text: "Clients", path: "/clients", icon: <People />, roles: ["ADMIN", "CASHIER"] }
+    { text: "Clients", path: "/clients", icon: <People />, roles: ["ADMIN", "CASHIER"] },
+    { text: "Client View", path: "/technician/clients", icon: <People />, roles: ["ADMIN", "TECHNICIAN"] }
   ].filter((item) => item.roles.includes(userType));
 
   const reportMenu = [

@@ -1456,6 +1456,12 @@ function ClientList() {
     message: "",
     severity: "info"
   });
+  const [clientActionConfirm, setClientActionConfirm] = useState({
+    open: false,
+    action: "",
+    title: "",
+    message: ""
+  });
   const [smsConfirmDialog, setSmsConfirmDialog] = useState({
     open: false,
     client: null
@@ -3060,6 +3066,89 @@ function ClientList() {
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button variant="contained" onClick={closeMessageBox}>
           OK
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const openClientActionConfirm = (action) => {
+    if (action === "pullout") {
+      setClientActionConfirm({
+        open: true,
+        action,
+        title: "Confirm Pull Out",
+        message:
+          "Are you sure you want to pull out this client? This will set the client as disconnected and update the plan/note."
+      });
+      return;
+    }
+
+    if (action === "refresh") {
+      setClientActionConfirm({
+        open: true,
+        action,
+        title: "Confirm Refresh Mode",
+        message:
+          "Are you sure you want to refresh this PPPoE client? This will remove the active PPPoE connection."
+      });
+    }
+  };
+
+  const closeClientActionConfirm = () => {
+    setClientActionConfirm((prev) => ({
+      ...prev,
+      open: false
+    }));
+  };
+
+  const handleConfirmClientAction = async () => {
+    const action = clientActionConfirm.action;
+    closeClientActionConfirm();
+
+    if (action === "pullout") {
+      await handlePullOutClient();
+      return;
+    }
+
+    if (action === "refresh") {
+      await handleRefreshPppoeMode();
+    }
+  };
+
+  const renderClientActionConfirmDialog = () => (
+    <Dialog
+      open={clientActionConfirm.open}
+      onClose={closeClientActionConfirm}
+      maxWidth="xs"
+      fullWidth
+      sx={{ zIndex: 20000 }}
+      BackdropProps={{
+        sx: { zIndex: 19999 }
+      }}
+      PaperProps={{
+        sx: { zIndex: 20001, borderRadius: 3 }
+      }}
+    >
+      <DialogTitle sx={{ fontWeight: 800 }}>
+        {clientActionConfirm.title}
+      </DialogTitle>
+      <DialogContent>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Please confirm before continuing.
+        </Alert>
+        <Typography>{clientActionConfirm.message}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={closeClientActionConfirm} sx={{ textTransform: "none", fontWeight: 700 }}>
+          No
+        </Button>
+        <Button
+          variant="contained"
+          color={clientActionConfirm.action === "pullout" ? "warning" : "primary"}
+          onClick={handleConfirmClientAction}
+          sx={{ textTransform: "none", fontWeight: 700 }}
+        >
+          Yes
         </Button>
       </DialogActions>
     </Dialog>
@@ -4842,7 +4931,7 @@ function ClientList() {
         <Button
           variant="outlined"
           color="warning"
-          onClick={handlePullOutClient}
+          onClick={() => openClientActionConfirm("pullout")}
           sx={{
             px: 2.5,
             py: 0.8,
@@ -4859,7 +4948,7 @@ function ClientList() {
           variant="outlined"
           color="info"
           disabled={refreshModeSaving}
-          onClick={handleRefreshPppoeMode}
+          onClick={() => openClientActionConfirm("refresh")}
           sx={{
             px: 2.5,
             py: 0.8,
@@ -4944,6 +5033,7 @@ function ClientList() {
 
           {renderClientFormActions()}
         </Paper>
+        {renderClientActionConfirmDialog()}
         {renderMessageDialog()}
       </Box>
     );
@@ -5790,7 +5880,7 @@ function ClientList() {
             <Button
               variant="outlined"
               color="warning"
-              onClick={handlePullOutClient}
+              onClick={() => openClientActionConfirm("pullout")}
               sx={{
                 px: 2.5,
                 py: 0.8,
@@ -7102,6 +7192,7 @@ function ClientList() {
         </DialogActions>
       </Dialog>
 
+      {renderClientActionConfirmDialog()}
       {renderMessageDialog()}
 
       <Dialog

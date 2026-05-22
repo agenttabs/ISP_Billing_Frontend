@@ -33,6 +33,7 @@ import SystemDiagnostics from "./pages/SystemDiagnostics";
 import SystemSettings from "./pages/SystemSettings";
 import SystemLogs from "./pages/SystemLogs";
 import TechReport from "./pages/TechReport";
+import TechnicianClientView from "./pages/TechnicianClientView";
 import TransactionVerification from "./pages/TransactionVerification";
 import UserAccounts from "./pages/UserAccounts";
 
@@ -112,6 +113,7 @@ function App() {
           </Route>
 
           <Route element={<RoleRoute allowedRoles={["ADMIN", "TECHNICIAN"]} />}>
+            <Route path="/technician/clients" element={<TechnicianClientView />} />
             <Route path="/nap" element={<NapLocation />} />
             <Route path="/reports/tech-report" element={<TechReport />} />
             <Route path="/repair-information" element={<RepairInformation />} />

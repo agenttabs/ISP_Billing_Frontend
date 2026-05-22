@@ -70,6 +70,7 @@ export default function SMSBatchPrograms() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [recipientRows, setRecipientRows] = useState([]);
+  const [recipientCount, setRecipientCount] = useState(0);
 
   const formatDateTime = (value) => {
     if (!value) return "-";
@@ -166,7 +167,9 @@ export default function SMSBatchPrograms() {
       setSelectedProgram(program);
       setViewDialogOpen(true);
       const { data } = await API.get(`/sms-batch-programs/${program._id}/recipients`);
-      setRecipientRows(data?.recipients || []);
+      const rows = data?.recipients || [];
+      setRecipientRows(rows);
+      setRecipientCount(Number(data?.totalRecipients ?? rows.length));
       setError("");
     } catch (err) {
       setRecipientRows([]);
@@ -181,6 +184,7 @@ export default function SMSBatchPrograms() {
     setViewDialogOpen(false);
     setSelectedProgram(null);
     setRecipientRows([]);
+    setRecipientCount(0);
     setViewLoading(false);
   };
 
@@ -522,7 +526,7 @@ export default function SMSBatchPrograms() {
             ) : (
               <>
                 <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
-                  Total Recipients: {recipientRows.length}
+                  Total Recipients: {recipientCount.toLocaleString("en-PH")}
                 </Typography>
 
                 <Table size="small">
