@@ -211,8 +211,21 @@ const defaultReceiptPrintConfig = {
   ShowCreatedBy: true
 };
 
+const normalizeBooleanSetting = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (["true", "1", "yes", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+
+  return fallback;
+};
+
 const QZ_TRAY_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js";
 const RECEIPT_PRINTER_STORAGE_KEY = "isp_billing_receipt_printer_name";
+let qzSecurityConfigured = false;
 
 const formatReceiptAmount = (value) =>
   Number(value || 0).toLocaleString("en-PH", {
@@ -589,6 +602,30 @@ const loadQzTrayScript = () =>
     document.body.appendChild(script);
   });
 
+const configureQzSecurity = (qz) => {
+  if (!qz?.security || qzSecurityConfigured) {
+    return;
+  }
+
+  qz.security.setCertificatePromise((resolve, reject) => {
+    API.get("/qz/certificate", { responseType: "text" })
+      .then(({ data }) => resolve(data))
+      .catch(reject);
+  });
+
+  if (typeof qz.security.setSignatureAlgorithm === "function") {
+    qz.security.setSignatureAlgorithm("SHA512");
+  }
+
+  qz.security.setSignaturePromise((request) => (resolve, reject) => {
+    API.post("/qz/sign", { request })
+      .then(({ data }) => resolve(data?.signature || data))
+      .catch(reject);
+  });
+
+  qzSecurityConfigured = true;
+};
+
 const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
   const savedPrinterName =
     typeof window !== "undefined"
@@ -626,6 +663,8 @@ const tryAutoPrintToXprinter = async (receiptData) => {
   if (!qz) {
     throw new Error("QZ Tray is not available.");
   }
+
+  configureQzSecurity(qz);
 
   if (!qz.websocket.isActive()) {
     await qz.websocket.connect();
@@ -1090,7 +1129,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     <style>
       @page {
         size: 80mm auto;
-        margin: 4mm;
+        margin: 0;
       }
       body {
         margin: 0;
@@ -1099,9 +1138,10 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         background: #fff;
       }
       .receipt {
-        width: 72mm;
-        margin: 0 auto;
-        padding: 2mm 0 6mm;
+        box-sizing: border-box;
+        width: 80mm;
+        margin: 0;
+        padding: 2mm 3mm 6mm;
         font-size: 12px;
         line-height: 1.45;
       }
@@ -1563,7 +1603,15 @@ function ClientList() {
       const nextConfig = {
         ...defaultReceiptPrintConfig,
         ...(data || {}),
-        CompanyName: normalizeCompanyName(companyNameOverride || data?.CompanyName)
+        CompanyName: normalizeCompanyName(companyNameOverride || data?.CompanyName),
+        EnablePrinting: normalizeBooleanSetting(
+          data?.EnablePrinting,
+          defaultReceiptPrintConfig.EnablePrinting
+        ),
+        UseDirectPrint: normalizeBooleanSetting(
+          data?.UseDirectPrint,
+          defaultReceiptPrintConfig.UseDirectPrint
+        )
       };
       setReceiptPrintConfig(nextConfig);
       return nextConfig;
@@ -3987,11 +4035,6 @@ function ClientList() {
         return;
       } catch (printError) {
         console.error("PAYMENT HISTORY REPRINT ERROR:", printError.message || printError);
-        showMessage(
-          "Xprinter Not Detected",
-          "Opening the normal print popup because direct Xprinter printing is unavailable.",
-          "warning"
-        );
       }
     }
 
@@ -4428,11 +4471,6 @@ function ClientList() {
               await tryAutoPrintToXprinter(receiptPayload);
             } catch (printError) {
               console.error("XPRINTER AUTO PRINT ERROR:", printError.message || printError);
-              showMessage(
-                "Xprinter Not Detected",
-                "Opening the normal print popup because direct Xprinter printing is unavailable.",
-                "warning"
-              );
               const receiptWindow =
                 typeof window !== "undefined"
                   ? window.open("", "_blank", "width=420,height=900")

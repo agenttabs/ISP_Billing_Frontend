@@ -17,6 +17,10 @@ import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName, normalizeCompanyName } from "../utils/companyName";
 
+const QZ_TRAY_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js";
+const RECEIPT_PRINTER_STORAGE_KEY = "isp_billing_receipt_printer_name";
+let qzSecurityConfigured = false;
+
 const defaultForm = {
   Name: "Default Thermal Receipt",
   CompanyName: DEFAULT_COMPANY_NAME,
@@ -30,6 +34,177 @@ const defaultForm = {
   ShowContactNumber: true,
   ShowReference: true,
   ShowCreatedBy: true
+};
+
+const fitReceiptText = (value, maxLength = 32) => {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength
+    ? normalized.slice(0, Math.max(maxLength - 3, 1)) + "..."
+    : normalized;
+};
+
+const formatReceiptAmount = (value) =>
+  Number(value || 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+const createReceiptLine = (label, value, width = 32) => {
+  const safeLabel = fitReceiptText(label, width - 8);
+  const safeValue = fitReceiptText(value, width - safeLabel.length - 1);
+  const gap = Math.max(width - safeLabel.length - safeValue.length, 1);
+  return `${safeLabel}${" ".repeat(gap)}${safeValue}`;
+};
+
+const loadQzTrayScript = () =>
+  new Promise((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("Window is not available."));
+      return;
+    }
+
+    if (window.qz) {
+      resolve(window.qz);
+      return;
+    }
+
+    const existingScript = document.querySelector('script[data-qz-tray="true"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(window.qz));
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load QZ Tray script.")));
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = QZ_TRAY_SCRIPT_URL;
+    script.async = true;
+    script.dataset.qzTray = "true";
+    script.onload = () => resolve(window.qz);
+    script.onerror = () => reject(new Error("Failed to load QZ Tray script."));
+    document.body.appendChild(script);
+  });
+
+const configureQzSecurity = (qz) => {
+  if (!qz?.security || qzSecurityConfigured) {
+    return;
+  }
+
+  qz.security.setCertificatePromise((resolve, reject) => {
+    API.get("/qz/certificate", { responseType: "text" })
+      .then(({ data }) => resolve(data))
+      .catch(reject);
+  });
+
+  if (typeof qz.security.setSignatureAlgorithm === "function") {
+    qz.security.setSignatureAlgorithm("SHA512");
+  }
+
+  qz.security.setSignaturePromise((request) => (resolve, reject) => {
+    API.post("/qz/sign", { request })
+      .then(({ data }) => resolve(data?.signature || data))
+      .catch(reject);
+  });
+
+  qzSecurityConfigured = true;
+};
+
+const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
+  const savedPrinterName =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(RECEIPT_PRINTER_STORAGE_KEY) || ""
+      : "";
+
+  const candidateNames = [
+    preferredPrinterName,
+    savedPrinterName,
+    "Xprinter",
+    "XP-58",
+    "XP-80"
+  ].filter((value) => String(value || "").trim() && String(value || "").trim() !== "----------");
+
+  for (const candidate of candidateNames) {
+    try {
+      const printer = await qz.printers.find(candidate);
+      if (printer) {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(RECEIPT_PRINTER_STORAGE_KEY, printer);
+        }
+        return printer;
+      }
+    } catch (error) {
+      // Keep trying the next configured printer name.
+    }
+  }
+
+  throw new Error("Xprinter printer was not found.");
+};
+
+const buildTestEscPosReceiptData = (config) => {
+  const paymentLines = [
+    { method: "CASH", amount: 500, reference: "" },
+    { method: "GCASH", amount: 1000, reference: "8039947123436" }
+  ];
+  const lines = [
+    "\x1B\x40",
+    "\x1B\x61\x01",
+    `${fitReceiptText(normalizeCompanyName(config.CompanyName))}\n`,
+    `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt")}\n`,
+    config.ReceiptSubtitle ? `${fitReceiptText(config.ReceiptSubtitle, 32)}\n` : "",
+    "===============================\n",
+    "\x1B\x61\x00",
+    `${createReceiptLine("Receipt No.", "PR-TEST-0001")}\n`,
+    `${createReceiptLine("Invoice No.", "SI-TEST-0001")}\n`,
+    `${createReceiptLine("Date", new Date().toLocaleString("en-PH"))}\n`,
+    `${createReceiptLine("Client", "Juan Dela Cruz")}\n`,
+    `${createReceiptLine("Account", "test-account")}\n`,
+    config.ShowContactNumber ? `${createReceiptLine("Contact", "09167700957")}\n` : "",
+    config.ShowSubscriptionCover
+      ? `${createReceiptLine("Cover", "May 15, 2026 to June 14, 2026")}\n`
+      : "",
+    "-------------------------------\n",
+    `${createReceiptLine("Payment Mode", "CASH/GCASH")}\n`,
+    "-------------------------------\n"
+  ];
+
+  paymentLines.forEach((line) => {
+    lines.push(`${createReceiptLine(line.method, formatReceiptAmount(line.amount))}\n`);
+
+    if (config.ShowReference && line.reference) {
+      lines.push(`${createReceiptLine("Ref", line.reference)}\n`);
+    }
+  });
+
+  lines.push(
+    "-------------------------------\n",
+    `${createReceiptLine("Total Paid", formatReceiptAmount(1500))}\n`,
+    "-------------------------------\n",
+    config.ShowCreatedBy ? `${createReceiptLine("Received by", "admin")}\n` : "",
+    "\n",
+    "\x1B\x61\x01",
+    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", 32)}\n\n\n`,
+    "\x1D\x56\x00"
+  );
+
+  return lines;
+};
+
+const tryDirectTestPrint = async (config) => {
+  const qz = await loadQzTrayScript();
+
+  if (!qz) {
+    throw new Error("QZ Tray is not available.");
+  }
+
+  configureQzSecurity(qz);
+
+  if (!qz.websocket.isActive()) {
+    await qz.websocket.connect();
+  }
+
+  const printerName = await resolveReceiptPrinterName(qz, config.PreferredPrinterName);
+  const printerConfig = qz.configs.create(printerName);
+
+  await qz.print(printerConfig, buildTestEscPosReceiptData(config));
 };
 
 const openTestReceiptPrint = (config) => {
@@ -75,16 +250,20 @@ const openTestReceiptPrint = (config) => {
           body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 12px;
+            padding: 0;
             color: #0f172a;
             background: #ffffff;
           }
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
           .receipt {
-            width: 300px;
-            margin: 0 auto;
+            box-sizing: border-box;
+            width: 80mm;
+            margin: 0;
             border: 1px dashed #cbd5e1;
-            border-radius: 10px;
-            padding: 14px;
+            padding: 3mm;
           }
           .center { text-align: center; }
           .title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
@@ -198,13 +377,27 @@ export default function PrintReceipt() {
     }
   };
 
-  const handleTestPrint = () => {
+  const handleTestPrint = async () => {
     setError("");
     setSuccess("");
 
     if (!form.EnablePrinting) {
       setError("Printing is disabled. Turn on Enable Printing first.");
       return;
+    }
+
+    if (form.UseDirectPrint) {
+      try {
+        await tryDirectTestPrint(form);
+        setSuccess("Test receipt sent to the configured Xprinter.");
+        return;
+      } catch (err) {
+        setError(
+          err.response?.data?.error ||
+            err.message ||
+            "Direct print failed. Opening browser print preview instead."
+        );
+      }
     }
 
     openTestReceiptPrint(form);
