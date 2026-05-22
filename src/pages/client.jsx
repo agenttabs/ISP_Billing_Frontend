@@ -290,7 +290,14 @@ const createWrappedReceiptField = (
 
 const getReceiptPaymentRows = (paymentBreakdown) =>
   Array.isArray(paymentBreakdown)
-    ? paymentBreakdown.filter((entry) => String(entry?.Method || "").trim())
+    ? paymentBreakdown
+        .filter((entry) => String(entry?.Method || "").trim())
+        .map((entry) => ({
+          ...entry,
+          Reference: String(
+            entry?.Reference || entry?.MOPRef || entry?.ReferenceNumber || ""
+          ).trim()
+        }))
     : [];
 
 const getReceiptPaymentMode = (paymentBreakdown, fallback = "-") => {
@@ -1126,12 +1133,33 @@ const normalizePaymentLineMethod = (value) =>
   String(value || "").trim().toUpperCase();
 
 const getPaymentBreakdownLines = (row) => {
+  if (Array.isArray(row?.EarningRows) && row.EarningRows.length) {
+    return row.EarningRows
+      .map((earning) => {
+        const method = normalizePaymentLineMethod(earning?.MOP || earning?.PaymentMethod);
+        const reference = String(
+          earning?.MOPRef || earning?.ReferenceNumber || earning?.Reference || ""
+        ).trim();
+
+        return {
+          Method: method,
+          Amount: Number(earning?.Cash || earning?.TotalAmount || earning?.Amount || 0),
+          Reference: method === "CASH" ? "" : reference,
+          TransferDate: String(earning?.TransferDate || earning?.GCashTransferDate || "").trim(),
+          ReceiverLast4: String(earning?.ReceiverLast4 || "").trim()
+        };
+      })
+      .filter((line) => line.Method && line.Amount > 0);
+  }
+
   if (Array.isArray(row?.PaymentBreakdown) && row.PaymentBreakdown.length) {
     return row.PaymentBreakdown
       .map((line) => ({
         Method: normalizePaymentLineMethod(line?.Method || line?.PaymentMethod),
         Amount: Number(line?.Amount || 0),
-        Reference: String(line?.Reference || "").trim()
+        Reference: String(line?.Reference || line?.MOPRef || line?.ReferenceNumber || "").trim(),
+        TransferDate: String(line?.TransferDate || line?.GCashTransferDate || "").trim(),
+        ReceiverLast4: String(line?.ReceiverLast4 || "").trim()
       }))
       .filter((line) => line.Method && line.Amount > 0);
   }
