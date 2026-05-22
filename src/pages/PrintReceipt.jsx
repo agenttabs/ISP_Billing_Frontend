@@ -262,6 +262,7 @@ const buildTestEscPosReceiptData = (config) => {
     { method: "CASH", amount: 500, reference: "" },
     { method: "GCASH", amount: 1000, reference: "8039947123436" }
   ];
+  const paymentMode = [...new Set(paymentLines.map((line) => line.method).filter(Boolean))].join("/");
   const lines = [
     "\x1B\x40",
     "\x1B\x61\x01",
@@ -285,7 +286,7 @@ const buildTestEscPosReceiptData = (config) => {
         )
       : []),
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
-    `${createReceiptLine("Payment Mode", "CASH/GCASH")}\n`,
+    `${createReceiptLine("Payment Mode", paymentMode || "-")}\n`,
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`
   ];
 

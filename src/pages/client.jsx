@@ -288,6 +288,32 @@ const createWrappedReceiptField = (
   ];
 };
 
+const getReceiptPaymentRows = (paymentBreakdown) =>
+  Array.isArray(paymentBreakdown)
+    ? paymentBreakdown.filter((entry) => String(entry?.Method || "").trim())
+    : [];
+
+const getReceiptPaymentMode = (paymentBreakdown, fallback = "-") => {
+  const methods = getReceiptPaymentRows(paymentBreakdown)
+    .map((entry) => String(entry.Method || "").trim().toUpperCase())
+    .filter(Boolean);
+  const uniqueMethods = [...new Set(methods)];
+
+  return uniqueMethods.length ? uniqueMethods.join("/") : fallback || "-";
+};
+
+const getReceiptHeaderReference = (paymentBreakdown, fallback = "") => {
+  const rowsWithReference = getReceiptPaymentRows(paymentBreakdown)
+    .map((entry) => String(entry.Reference || "").trim())
+    .filter(Boolean);
+
+  if (rowsWithReference.length === 1) {
+    return rowsWithReference[0];
+  }
+
+  return rowsWithReference.length ? "" : fallback || "";
+};
+
 const createPaymentReceiptImage = (receiptData) => {
   if (typeof document === "undefined") {
     return "";
@@ -301,6 +327,8 @@ const createPaymentReceiptImage = (receiptData) => {
   const rows = paymentRows.length
     ? paymentRows
     : [{ Method: receiptData?.paymentMethod || "-", Amount: receiptData?.amountPaid || 0 }];
+  const receiptPaymentMode = getReceiptPaymentMode(paymentRows, receiptData?.paymentMethod || "-");
+  const receiptHeaderReference = getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
   const width = 640;
   const paddingX = 56;
   const lineHeight = 30;
@@ -338,14 +366,14 @@ const createPaymentReceiptImage = (receiptData) => {
 
   lines.push(
     { type: "divider" },
-    { type: "row", label: "Payment Mode", value: receiptData?.paymentMethod || "-" }
+    { type: "row", label: "Payment Mode", value: receiptPaymentMode }
   );
 
-  if (config.ShowReference) {
+  if (config.ShowReference && receiptHeaderReference) {
     lines.push({
       type: "row",
       label: "Reference",
-      value: fitReceiptText(receiptData?.reference || "-", 28)
+      value: fitReceiptText(receiptHeaderReference, 28)
     });
   }
 
@@ -528,6 +556,9 @@ const buildEscPosReceiptData = (receiptData) => {
     ...defaultReceiptPrintConfig,
     ...(receiptConfig || {})
   };
+  const paymentRows = getReceiptPaymentRows(paymentBreakdown);
+  const receiptPaymentMode = getReceiptPaymentMode(paymentRows, paymentMethod || "-");
+  const receiptHeaderReference = getReceiptHeaderReference(paymentRows, reference || "");
 
   const lines = [
     "\x1B\x40",
@@ -555,15 +586,15 @@ const buildEscPosReceiptData = (receiptData) => {
         )
       : []),
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
-    `${createReceiptLine("Payment Mode", paymentMethod)}\n`,
-    config.ShowReference
-      ? `${createReceiptLine("Reference", reference || "-")}\n`
+    `${createReceiptLine("Payment Mode", receiptPaymentMode)}\n`,
+    config.ShowReference && receiptHeaderReference
+      ? `${createReceiptLine("Reference", receiptHeaderReference)}\n`
       : "",
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`
   ];
 
-  if (Array.isArray(paymentBreakdown) && paymentBreakdown.length) {
-    paymentBreakdown.forEach((entry) => {
+  if (paymentRows.length) {
+    paymentRows.forEach((entry) => {
       lines.push(
         `${createReceiptLine(entry.Method || "-", formatReceiptAmount(entry.Amount || 0))}\n`
       );
@@ -1224,6 +1255,9 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         )
         .join("")
     : `<div class="row"><span class="label">${escapeHtml(paymentMethod)}</span><span class="value">PHP ${Number(amountPaid || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>`;
+  const receiptPaymentRows = getReceiptPaymentRows(paymentBreakdown);
+  const receiptPaymentMode = getReceiptPaymentMode(receiptPaymentRows, paymentMethod || "-");
+  const receiptHeaderReference = getReceiptHeaderReference(receiptPaymentRows, reference || "");
 
   receiptWindow.document.open();
   receiptWindow.document.write(`<!doctype html>
@@ -1317,10 +1351,10 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 
       <div class="divider"></div>
 
-      <div class="row"><span class="label">Payment Mode</span><span class="value">${escapeHtml(paymentMethod)}</span></div>
+      <div class="row"><span class="label">Payment Mode</span><span class="value">${escapeHtml(receiptPaymentMode)}</span></div>
       ${
-        config.ShowReference
-          ? `<div class="row"><span class="label">Reference</span><span class="value wrap">${escapeHtml(reference || "-")}</span></div>`
+        config.ShowReference && receiptHeaderReference
+          ? `<div class="row"><span class="label">Reference</span><span class="value wrap">${escapeHtml(receiptHeaderReference)}</span></div>`
           : ""
       }
       <div class="divider"></div>
