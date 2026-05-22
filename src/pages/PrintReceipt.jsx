@@ -110,10 +110,24 @@ const configureQzSecurity = (qz) => {
 
 const getAvailablePrinterNames = async (qz) => {
   try {
+    const details = await qz.printers.details();
+    if (Array.isArray(details) && details.length) {
+      return details
+        .map((printer) =>
+          String(printer?.name || printer?.printerName || printer || "").trim()
+        )
+        .filter(Boolean);
+    }
+  } catch (error) {
+    // Older QZ versions may not support details(), so try find() below.
+  }
+
+  try {
     const printers = await qz.printers.find();
-    return Array.isArray(printers)
-      ? printers.map((printer) => String(printer || "").trim()).filter(Boolean)
-      : [];
+    if (Array.isArray(printers)) {
+      return printers.map((printer) => String(printer || "").trim()).filter(Boolean);
+    }
+    return printers ? [String(printers).trim()].filter(Boolean) : [];
   } catch (error) {
     return [];
   }
