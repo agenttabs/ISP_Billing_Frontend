@@ -567,11 +567,18 @@ const buildEscPosReceiptData = (receiptData) => {
     `${createReceiptLine("Notes", notes || "-")}\n`,
     "\n",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", 32)}\n\n\n`,
+    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", 32)}\n`,
+    "\x1B\x64\x04",
     "\x1D\x56\x00"
   );
 
-  return lines;
+  return [
+    {
+      type: "raw",
+      format: "plain",
+      data: lines.join("")
+    }
+  ];
 };
 
 const loadQzTrayScript = () =>
