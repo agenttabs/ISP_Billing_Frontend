@@ -83,11 +83,17 @@ const wrapReceiptText = (value, maxLength = THERMAL_RECEIPT_CHAR_WIDTH) => {
   return lines.length ? lines : ["-"];
 };
 
-const createWrappedReceiptField = (label, value, width = THERMAL_RECEIPT_CHAR_WIDTH) => {
+const createWrappedReceiptField = (
+  label,
+  value,
+  width = THERMAL_RECEIPT_CHAR_WIDTH,
+  maxLines = null
+) => {
   const wrappedLines = wrapReceiptText(value || "-", width);
+  const visibleLines = maxLines ? wrappedLines.slice(0, maxLines) : wrappedLines;
   return [
     `${label}\n`,
-    ...wrappedLines.map((line) => `  ${line}\n`)
+    ...visibleLines.map((line) => `  ${line}\n`)
   ];
 };
 
@@ -273,7 +279,9 @@ const buildTestEscPosReceiptData = (config) => {
     ...(config.ShowSubscriptionCover
       ? createWrappedReceiptField(
           "Subscription Cover",
-          "Subscription covered from May 15, 2026 to June 14, 2026"
+          "Subscription covered from May 15, 2026 to June 14, 2026",
+          THERMAL_RECEIPT_CHAR_WIDTH,
+          2
         )
       : []),
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,

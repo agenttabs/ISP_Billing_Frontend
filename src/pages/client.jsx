@@ -274,11 +274,17 @@ const wrapReceiptText = (value, maxLength = 48) => {
   return lines.length ? lines : ["-"];
 };
 
-const createWrappedReceiptField = (label, value, width = THERMAL_RECEIPT_CHAR_WIDTH) => {
+const createWrappedReceiptField = (
+  label,
+  value,
+  width = THERMAL_RECEIPT_CHAR_WIDTH,
+  maxLines = null
+) => {
   const wrappedLines = wrapReceiptText(value || "-", width);
+  const visibleLines = maxLines ? wrappedLines.slice(0, maxLines) : wrappedLines;
   return [
     `${label}\n`,
-    ...wrappedLines.map((line) => `  ${line}\n`)
+    ...visibleLines.map((line) => `  ${line}\n`)
   ];
 };
 
@@ -541,7 +547,12 @@ const buildEscPosReceiptData = (receiptData) => {
       ? `${createReceiptLine("Contact", contactNumber || "-")}\n`
       : "",
     ...(config.ShowSubscriptionCover
-      ? createWrappedReceiptField("Subscription Cover", subscriptionCover || "-")
+      ? createWrappedReceiptField(
+          "Subscription Cover",
+          subscriptionCover || "-",
+          THERMAL_RECEIPT_CHAR_WIDTH,
+          2
+        )
       : []),
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Payment Mode", paymentMethod)}\n`,
