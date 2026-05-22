@@ -108,6 +108,17 @@ const configureQzSecurity = (qz) => {
   qzSecurityConfigured = true;
 };
 
+const getAvailablePrinterNames = async (qz) => {
+  try {
+    const printers = await qz.printers.find();
+    return Array.isArray(printers)
+      ? printers.map((printer) => String(printer || "").trim()).filter(Boolean)
+      : [];
+  } catch (error) {
+    return [];
+  }
+};
+
 const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
   const savedPrinterName =
     typeof window !== "undefined"
@@ -118,9 +129,12 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
     preferredPrinterName,
     savedPrinterName,
     "Xprinter",
+    "Xprinter XP-80",
     "XP-58",
     "XP-80"
-  ].filter((value) => String(value || "").trim() && String(value || "").trim() !== "----------");
+  ]
+    .map((value) => String(value || "").trim())
+    .filter((value) => value && value !== "----------");
 
   for (const candidate of candidateNames) {
     try {
@@ -136,7 +150,30 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
     }
   }
 
-  throw new Error("Xprinter printer was not found.");
+  const availablePrinters = await getAvailablePrinterNames(qz);
+  const normalizedCandidates = candidateNames.map((candidate) => candidate.toLowerCase());
+  const fuzzyMatch = availablePrinters.find((printer) => {
+    const normalizedPrinter = printer.toLowerCase();
+    return normalizedCandidates.some(
+      (candidate) =>
+        normalizedPrinter === candidate ||
+        normalizedPrinter.includes(candidate) ||
+        candidate.includes(normalizedPrinter)
+    );
+  });
+
+  if (fuzzyMatch) {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(RECEIPT_PRINTER_STORAGE_KEY, fuzzyMatch);
+    }
+    return fuzzyMatch;
+  }
+
+  const availableMessage = availablePrinters.length
+    ? ` Available printers: ${availablePrinters.join(", ")}.`
+    : " No printers were returned by QZ Tray.";
+
+  throw new Error(`Xprinter printer was not found.${availableMessage}`);
 };
 
 const buildTestEscPosReceiptData = (config) => {
