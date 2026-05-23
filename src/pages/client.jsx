@@ -1493,7 +1493,11 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   receiptWindow.document.close();
 };
 
-const createReceiptPayloadFromHistoryRow = (row, receiptConfig = defaultReceiptPrintConfig) => ({
+const createReceiptPayloadFromHistoryRow = (
+  row,
+  receiptConfig = defaultReceiptPrintConfig,
+  client = null
+) => ({
   clientName: row?.ClientName || "",
   accountName: row?.AccountName || "",
   planAmount:
@@ -1504,7 +1508,7 @@ const createReceiptPayloadFromHistoryRow = (row, receiptConfig = defaultReceiptP
     row?.TotalAmount ??
     row?.Cash ??
     "",
-  contactNumber: row?.ContactNumber || "",
+  contactNumber: client?.ContactNumber || "",
   paymentReceipt: row?.PaymentReceipt || row?.Invoice || row?.TransactionCode || "-",
   paymentDate: row?.TransactionDate
     ? new Date(row.TransactionDate).toLocaleString("en-PH")
@@ -4274,7 +4278,11 @@ function ClientList() {
 
   const handleReprintPaymentHistory = async (row) => {
     const latestReceiptConfig = await loadReceiptPrintConfig();
-    const receiptPayload = createReceiptPayloadFromHistoryRow(row, latestReceiptConfig);
+    const receiptPayload = createReceiptPayloadFromHistoryRow(
+      row,
+      latestReceiptConfig,
+      selectedClient
+    );
 
     if (!latestReceiptConfig?.EnablePrinting) {
       showMessage("Printing Disabled", "Receipt printing is disabled in Print Receipt settings.", "info");
@@ -4307,7 +4315,11 @@ function ClientList() {
 
   const handleOpenPaymentHistoryEReceipt = async (row) => {
     const latestReceiptConfig = await loadReceiptPrintConfig();
-    const receiptPayload = createReceiptPayloadFromHistoryRow(row, latestReceiptConfig);
+    const receiptPayload = createReceiptPayloadFromHistoryRow(
+      row,
+      latestReceiptConfig,
+      selectedClient
+    );
     const generatedReceiptImage = createPaymentReceiptImage(receiptPayload);
 
     if (!generatedReceiptImage) {
