@@ -340,7 +340,9 @@ const createPaymentReceiptImage = (receiptData) => {
     ? paymentRows
     : [{ Method: receiptData?.paymentMethod || "-", Amount: receiptData?.amountPaid || 0 }];
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, receiptData?.paymentMethod || "-");
-  const receiptHeaderReference = getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
+  const receiptHeaderReference =
+    String(receiptData?.salesInvoice || "").trim() ||
+    getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(receiptData?.planAmount);
   const width = 640;
   const paddingX = 56;
@@ -389,7 +391,7 @@ const createPaymentReceiptImage = (receiptData) => {
   if (config.ShowReference && receiptHeaderReference) {
     lines.push({
       type: "row",
-      label: "Reference",
+      label: "Sales Invoice",
       value: fitReceiptText(receiptHeaderReference, 28)
     });
   }
@@ -557,6 +559,7 @@ const buildEscPosReceiptData = (receiptData) => {
     planAmount,
     contactNumber,
     paymentReceipt,
+    salesInvoice,
     paymentDate,
     paymentMethod,
     reference,
@@ -576,7 +579,9 @@ const buildEscPosReceiptData = (receiptData) => {
   };
   const paymentRows = getReceiptPaymentRows(paymentBreakdown);
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, paymentMethod || "-");
-  const receiptHeaderReference = getReceiptHeaderReference(paymentRows, reference || "");
+  const receiptHeaderReference =
+    String(salesInvoice || "").trim() ||
+    getReceiptHeaderReference(paymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
 
   const lines = [
@@ -608,7 +613,7 @@ const buildEscPosReceiptData = (receiptData) => {
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Payment Mode", receiptPaymentMode)}\n`,
     config.ShowReference && receiptHeaderReference
-      ? `${createReceiptLine("Reference", receiptHeaderReference)}\n`
+      ? `${createReceiptLine("Sales Invoice", receiptHeaderReference)}\n`
       : "",
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`
   ];
@@ -1325,6 +1330,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     planAmount,
     contactNumber,
     paymentReceipt,
+    salesInvoice,
     paymentDate,
     paymentMethod,
     reference,
@@ -1356,7 +1362,9 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     : `<div class="row"><span class="label">${escapeHtml(paymentMethod)}</span><span class="value">PHP ${Number(amountPaid || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>`;
   const receiptPaymentRows = getReceiptPaymentRows(paymentBreakdown);
   const receiptPaymentMode = getReceiptPaymentMode(receiptPaymentRows, paymentMethod || "-");
-  const receiptHeaderReference = getReceiptHeaderReference(receiptPaymentRows, reference || "");
+  const receiptHeaderReference =
+    String(salesInvoice || "").trim() ||
+    getReceiptHeaderReference(receiptPaymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
 
   receiptWindow.document.open();
@@ -1459,7 +1467,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
       <div class="row"><span class="label">Payment Mode</span><span class="value">${escapeHtml(receiptPaymentMode)}</span></div>
       ${
         config.ShowReference && receiptHeaderReference
-          ? `<div class="row"><span class="label">Reference</span><span class="value wrap">${escapeHtml(receiptHeaderReference)}</span></div>`
+          ? `<div class="row"><span class="label">Sales Invoice</span><span class="value wrap">${escapeHtml(receiptHeaderReference)}</span></div>`
           : ""
       }
       <div class="divider"></div>
@@ -1510,6 +1518,7 @@ const createReceiptPayloadFromHistoryRow = (
     "",
   contactNumber: client?.ContactNumber || "",
   paymentReceipt: row?.PaymentReceipt || row?.Invoice || row?.TransactionCode || "-",
+  salesInvoice: row?.Invoice || "",
   paymentDate: row?.TransactionDate
     ? new Date(row.TransactionDate).toLocaleString("en-PH")
     : row?.PaymentDate
@@ -4679,6 +4688,7 @@ function ClientList() {
         planAmount: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
         contactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || "",
         paymentReceipt: paymentReceiptNumber,
+        salesInvoice: salesInvoiceNumber,
         paymentDate: new Date(transactionDateTime).toLocaleString("en-PH"),
         paymentMethod: topLevelPaymentMethod,
         reference: topLevelPaymentReference,
