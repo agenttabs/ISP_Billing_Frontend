@@ -383,7 +383,6 @@ export default function BillingStatementContent({
     const latestPaymentLines = latestPayment
       ? [
           `Date: ${formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}`,
-          `${latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}`,
           `Amount: ${formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}`
         ]
       : ["No payment history found for this account yet."];
@@ -521,7 +520,6 @@ export default function BillingStatementContent({
           {latestPayment ? (
             <Stack spacing={1.1}>
               <Typography><strong>Date:</strong> {formatDate(latestPayment.TransactionDate || latestPayment.PaymentDate)}</Typography>
-              <Typography>{latestPayment.PaymentReceipt || latestPayment.Invoice || "-"}</Typography>
               <Typography><strong>Amount:</strong> {formatCurrency(latestPayment.TotalAmount || latestPayment.Cash || 0)}</Typography>
             </Stack>
           ) : (

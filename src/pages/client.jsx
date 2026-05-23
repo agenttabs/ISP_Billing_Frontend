@@ -233,6 +233,11 @@ const formatReceiptAmount = (value) =>
     maximumFractionDigits: 2
   });
 
+const formatReceiptPlanAmount = (value) => {
+  const amount = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? `PHP ${formatReceiptAmount(amount)}` : "";
+};
+
 const fitReceiptText = (value, maxLength = 32) => {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   return normalized.length > maxLength
@@ -336,6 +341,7 @@ const createPaymentReceiptImage = (receiptData) => {
     : [{ Method: receiptData?.paymentMethod || "-", Amount: receiptData?.amountPaid || 0 }];
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, receiptData?.paymentMethod || "-");
   const receiptHeaderReference = getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
+  const receiptPlanAmount = formatReceiptPlanAmount(receiptData?.planAmount);
   const width = 640;
   const paddingX = 56;
   const lineHeight = 30;
@@ -356,6 +362,10 @@ const createPaymentReceiptImage = (receiptData) => {
     { type: "row", label: "Client", value: fitReceiptText(receiptData?.clientName || "-", 28) },
     { type: "row", label: "Account", value: fitReceiptText(receiptData?.accountName || "-", 28) }
   );
+
+  if (receiptPlanAmount) {
+    lines.push({ type: "row", label: "Plan", value: receiptPlanAmount });
+  }
 
   if (config.ShowContactNumber) {
     lines.push({ type: "row", label: "Contact", value: receiptData?.contactNumber || "-" });
@@ -544,6 +554,7 @@ const buildEscPosReceiptData = (receiptData) => {
   const {
     clientName,
     accountName,
+    planAmount,
     contactNumber,
     paymentReceipt,
     paymentDate,
@@ -566,6 +577,7 @@ const buildEscPosReceiptData = (receiptData) => {
   const paymentRows = getReceiptPaymentRows(paymentBreakdown);
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, paymentMethod || "-");
   const receiptHeaderReference = getReceiptHeaderReference(paymentRows, reference || "");
+  const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
 
   const lines = [
     "\x1B\x40",
@@ -581,6 +593,7 @@ const buildEscPosReceiptData = (receiptData) => {
     `${createReceiptLine("Date", paymentDate)}\n`,
     `${createReceiptLine("Client", clientName)}\n`,
     `${createReceiptLine("Account", accountName)}\n`,
+    receiptPlanAmount ? `${createReceiptLine("Plan", receiptPlanAmount)}\n` : "",
     config.ShowContactNumber
       ? `${createReceiptLine("Contact", contactNumber || "-")}\n`
       : "",
@@ -1244,6 +1257,26 @@ const formatPaymentReferences = (row) => {
   return lines.map((line) => `${line.Method}: ${line.Reference}`).join(" | ");
 };
 
+const formatPrintPaymentMode = (row) => {
+  const rawMode = String(row?.PaymentMethod || row?.MOP || "").trim().toUpperCase();
+  if (rawMode) {
+    return rawMode
+      .split(/[\/,|]+/)
+      .map((mode) => mode.trim())
+      .filter((mode) => ["CASH", "GCASH", "PAYMAYA", "BANK"].includes(mode))
+      .join("/") || rawMode;
+  }
+
+  const methods = getPaymentBreakdownLines(row)
+    .map((line) => String(line.Method || "").trim().toUpperCase())
+    .filter((mode) => ["CASH", "GCASH", "PAYMAYA", "BANK"].includes(mode));
+
+  return [...new Set(methods)].join("/") || "-";
+};
+
+const formatPrintReference = (row) =>
+  row?.PaymentReceipt || row?.Invoice || row?.TransactionCode || "-";
+
 const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   if (!receiptWindow) {
     return;
@@ -1252,6 +1285,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   const {
     clientName,
     accountName,
+    planAmount,
     contactNumber,
     paymentReceipt,
     paymentDate,
@@ -1286,6 +1320,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   const receiptPaymentRows = getReceiptPaymentRows(paymentBreakdown);
   const receiptPaymentMode = getReceiptPaymentMode(receiptPaymentRows, paymentMethod || "-");
   const receiptHeaderReference = getReceiptHeaderReference(receiptPaymentRows, reference || "");
+  const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
 
   receiptWindow.document.open();
   receiptWindow.document.write(`<!doctype html>
@@ -1367,6 +1402,11 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
       <div class="row"><span class="label">Client</span><span class="value wrap">${escapeHtml(clientName)}</span></div>
       <div class="row"><span class="label">Account</span><span class="value wrap">${escapeHtml(accountName)}</span></div>
       ${
+        receiptPlanAmount
+          ? `<div class="row"><span class="label">Plan</span><span class="value wrap">${escapeHtml(receiptPlanAmount)}</span></div>`
+          : ""
+      }
+      ${
         config.ShowContactNumber
           ? `<div class="row"><span class="label">Contact</span><span class="value">${escapeHtml(contactNumber || "-")}</span></div>`
           : ""
@@ -1419,6 +1459,14 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 const createReceiptPayloadFromHistoryRow = (row, receiptConfig = defaultReceiptPrintConfig) => ({
   clientName: row?.ClientName || "",
   accountName: row?.AccountName || "",
+  planAmount:
+    row?.PlanAmount ??
+    row?.MonthlyDue ??
+    row?.PlanPrice ??
+    row?.AmountDue ??
+    row?.TotalAmount ??
+    row?.Cash ??
+    "",
   contactNumber: row?.ContactNumber || "",
   paymentReceipt: row?.PaymentReceipt || row?.Invoice || row?.TransactionCode || "-",
   paymentDate: row?.TransactionDate
@@ -4579,6 +4627,7 @@ function ClientList() {
       const receiptPayload = {
         clientName: selectedClient.ClientName || "",
         accountName: selectedClient.AccountName || "",
+        planAmount: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
         contactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || "",
         paymentReceipt: paymentReceiptNumber,
         paymentDate: new Date(transactionDateTime).toLocaleString("en-PH"),
@@ -7766,9 +7815,9 @@ function ClientList() {
                             : "-"}
                         </TableCell>
                         <TableCell>{row.Type || row.MOP || "-"}</TableCell>
-                        <TableCell>{formatPaymentBreakdown(row)}</TableCell>
+                        <TableCell>{formatPrintPaymentMode(row)}</TableCell>
                         <TableCell>{row.PaymentReceipt || "-"}</TableCell>
-                        <TableCell>{formatPaymentReferences(row)}</TableCell>
+                        <TableCell>{formatPrintReference(row)}</TableCell>
                         <TableCell>
                           {row.PaymentDate
                             ? new Date(row.PaymentDate).toLocaleString("en-PH")
