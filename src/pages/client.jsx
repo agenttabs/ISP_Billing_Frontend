@@ -1123,6 +1123,43 @@ const resolvePreviousReconnectPlan = ({ client, netPlans, authMode }) => {
   );
 };
 
+const resolveCurrentReconnectPlan = ({ client, netPlans, authMode }) => {
+  const normalizedAuthMode = getNormalizedAuthMode(
+    authMode || client?.AuthenticationMode
+  );
+  const currentNetPlan = isDisconnectedPlanValue(client?.NetPlan)
+    ? ""
+    : String(client?.NetPlan || "").trim();
+  const currentProfile = isDisconnectedPlanValue(client?.Profile)
+    ? ""
+    : String(client?.Profile || "").trim();
+
+  if (!currentNetPlan && !currentProfile) {
+    return null;
+  }
+
+  return (
+    (netPlans || []).find((plan) => {
+      const planType = getPlanType(plan);
+      if (normalizedAuthMode && planType && planType !== normalizedAuthMode) {
+        return false;
+      }
+
+      const planName = String(getPlanName(plan) || "").trim();
+      const planSpeed = String(getPlanSpeed(plan) || "").trim();
+
+      return (
+        (currentNetPlan && (planName === currentNetPlan || planSpeed === currentNetPlan)) ||
+        (currentProfile && planName === currentProfile)
+      );
+    }) || null
+  );
+};
+
+const resolveDefaultReconnectPlan = ({ client, netPlans, authMode }) =>
+  resolvePreviousReconnectPlan({ client, netPlans, authMode }) ||
+  resolveCurrentReconnectPlan({ client, netPlans, authMode });
+
 const getDisplayedPaymentStatus = (client) => {
   if (!client?.DueDate) {
     return (client?.PaymentStatus || "UNPAID").toUpperCase();
@@ -2411,7 +2448,7 @@ function ClientList() {
     const reconnectAuthMode = getNormalizedAuthMode(
       client?.PreviousAuthenticationMode || client?.AuthenticationMode
     );
-    const previousReconnectPlan = resolvePreviousReconnectPlan({
+    const defaultReconnectPlan = resolveDefaultReconnectPlan({
       client,
       netPlans,
       authMode: reconnectAuthMode
@@ -2430,8 +2467,8 @@ function ClientList() {
       SendSms: true,
       ReconnectRequired: Boolean(options.reconnectRequired),
       ReconnectAuthMode: reconnectAuthMode,
-      ReconnectPlan: getPlanName(previousReconnectPlan) || "",
-      ReconnectCharge: previousReconnectPlan ? getPlanPrice(previousReconnectPlan) : 0,
+      ReconnectPlan: getPlanName(defaultReconnectPlan) || "",
+      ReconnectCharge: defaultReconnectPlan ? getPlanPrice(defaultReconnectPlan) : 0,
       ReconnectMacAddress: String(client.PreviousMacAddress || client.MacAddress || "")
         .trim()
         .toUpperCase()
@@ -2719,7 +2756,7 @@ function ClientList() {
 
   const handleReconnectAuthModeChange = (event) => {
     const nextAuthMode = getNormalizedAuthMode(event.target.value);
-    const previousReconnectPlan = resolvePreviousReconnectPlan({
+    const defaultReconnectPlan = resolveDefaultReconnectPlan({
       client: selectedClient,
       netPlans,
       authMode: nextAuthMode
@@ -2728,8 +2765,8 @@ function ClientList() {
     setPaymentForm((prev) => ({
       ...prev,
       ReconnectAuthMode: nextAuthMode,
-      ReconnectPlan: getPlanName(previousReconnectPlan) || "",
-      ReconnectCharge: previousReconnectPlan ? getPlanPrice(previousReconnectPlan) : 0,
+      ReconnectPlan: getPlanName(defaultReconnectPlan) || "",
+      ReconnectCharge: defaultReconnectPlan ? getPlanPrice(defaultReconnectPlan) : 0,
       ReconnectMacAddress:
         nextAuthMode === "IPOE"
           ? String(selectedClient?.PreviousMacAddress || prev.ReconnectMacAddress || "")
@@ -5382,10 +5419,10 @@ function ClientList() {
             }
           }}
         >
-          <Tab value="ACTIVE" label={`Active (${activeCount})`} />
+          <Tab value="ACTIVE" label={isAdminUser ? `Active (${activeCount})` : "Active"} />
           <Tab
             value="DISCONNECTED"
-            label={`Disconnected (${disconnectedCount})`}
+            label={isAdminUser ? `Disconnected (${disconnectedCount})` : "Disconnected"}
           />
         </Tabs>
 

@@ -259,19 +259,24 @@ export default function BillingStatementContent({
     () => getBillingDueDate(client, billingPeriod, statementRange),
     [billingPeriod, client, statementRange]
   );
-  const selectedHistory = useMemo(() => {
-    if (!billingPeriod) {
-      return (history || []).slice().sort((a, b) => {
+  const sortedPaymentHistory = useMemo(
+    () =>
+      (history || []).slice().sort((a, b) => {
         const left = getPaymentDate(a)?.getTime() || 0;
         const right = getPaymentDate(b)?.getTime() || 0;
 
         return right - left;
-      });
+      }),
+    [history]
+  );
+  const selectedHistory = useMemo(() => {
+    if (!billingPeriod) {
+      return sortedPaymentHistory;
     }
 
     return getPaymentsForDueCycle(history, billingDueDate);
-  }, [billingDueDate, billingPeriod, history]);
-  const latestPayment = selectedHistory[0] || null;
+  }, [billingDueDate, billingPeriod, history, sortedPaymentHistory]);
+  const latestPayment = sortedPaymentHistory[0] || null;
   const monthlyDue = Number(client?.AmountDue || 0);
   const previousDueBalance = billingPeriod
     ? getPreviousDueBalance({ history, billingDueDate, monthlyDue })
