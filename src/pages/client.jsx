@@ -211,6 +211,21 @@ const defaultReceiptPrintConfig = {
   ShowCreatedBy: true
 };
 
+const RECEIPT_LOGO_SRC = "/dns_logo.png";
+
+const loadReceiptLogoImage = () =>
+  new Promise((resolve) => {
+    if (typeof Image === "undefined") {
+      resolve(null);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = RECEIPT_LOGO_SRC;
+  });
+
 const normalizeBooleanSetting = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -326,7 +341,7 @@ const getReceiptHeaderReference = (paymentBreakdown, fallback = "") => {
   return rowsWithReference.length ? "" : fallback || "";
 };
 
-const createPaymentReceiptImage = (receiptData) => {
+const createPaymentReceiptImage = async (receiptData) => {
   if (typeof document === "undefined") {
     return "";
   }
@@ -344,12 +359,12 @@ const createPaymentReceiptImage = (receiptData) => {
     String(receiptData?.salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(receiptData?.planAmount);
+  const receiptLogo = await loadReceiptLogoImage();
   const width = 640;
   const paddingX = 56;
   const lineHeight = 30;
   const dividerHeight = 34;
   const lines = [
-    { type: "center", text: companyName, size: 30, weight: 800 },
     { type: "center", text: config.ReceiptTitle || "Official Payment Receipt", size: 22, weight: 700 }
   ];
 
@@ -458,7 +473,7 @@ const createPaymentReceiptImage = (receiptData) => {
   );
 
   const height =
-    42 +
+    130 +
     lines.reduce(
       (total, line) => total + (line.type === "divider" ? dividerHeight : lineHeight),
       0
@@ -475,15 +490,6 @@ const createPaymentReceiptImage = (receiptData) => {
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
-
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate(-Math.PI / 7);
-  ctx.fillStyle = "rgba(15, 23, 42, 0.055)";
-  ctx.font = "900 58px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(companyName, 0, 0);
-  ctx.restore();
 
   const drawText = (text, x, y, options = {}) => {
     ctx.fillStyle = options.color || "#000000";
@@ -518,7 +524,25 @@ const createPaymentReceiptImage = (receiptData) => {
     });
   };
 
-  let y = 58;
+  let y = 46;
+
+  if (receiptLogo) {
+    const logoWidth = Math.min(460, width - paddingX * 2);
+    const logoHeight = Math.min(
+      78,
+      logoWidth / (receiptLogo.naturalWidth / receiptLogo.naturalHeight)
+    );
+    ctx.drawImage(receiptLogo, (width - logoWidth) / 2, y, logoWidth, logoHeight);
+    y += logoHeight + 34;
+  } else {
+    drawText(companyName, width / 2, y, {
+      size: 30,
+      weight: 800,
+      align: "center"
+    });
+    y += lineHeight + 22;
+  }
+
   lines.forEach((line) => {
     if (line.type === "divider") {
       drawDivider(y);
@@ -1366,6 +1390,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(receiptPaymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
+  const receiptLogoUrl = `${window.location.origin}${RECEIPT_LOGO_SRC}`;
 
   receiptWindow.document.open();
   receiptWindow.document.write(`<!doctype html>
@@ -1394,6 +1419,13 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
       }
       .center {
         text-align: center;
+      }
+      .logo {
+        display: block;
+        width: 58mm;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto 3mm;
       }
       .title {
         font-size: 16px;
@@ -1431,7 +1463,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
   <body>
     <div class="receipt">
       <div class="center">
-        <div class="title">${escapeHtml(normalizeCompanyName(config.CompanyName))}</div>
+        <img class="logo" src="${receiptLogoUrl}" alt="${escapeHtml(normalizeCompanyName(config.CompanyName))}" />
         <div>${escapeHtml(config.ReceiptTitle || "Official Payment Receipt")}</div>
         ${
           config.ReceiptSubtitle
@@ -4336,7 +4368,7 @@ function ClientList() {
       latestReceiptConfig,
       selectedClient
     );
-    const generatedReceiptImage = createPaymentReceiptImage(receiptPayload);
+    const generatedReceiptImage = await createPaymentReceiptImage(receiptPayload);
 
     if (!generatedReceiptImage) {
       showMessage("eReceipt Failed", "Unable to generate the eReceipt image.", "error");
@@ -4712,7 +4744,7 @@ function ClientList() {
       handleClosePaymentModal();
 
       if (shouldOpenGeneratedReceiptAfterSave) {
-        const generatedReceiptImage = createPaymentReceiptImage(receiptPayload);
+        const generatedReceiptImage = await createPaymentReceiptImage(receiptPayload);
         if (generatedReceiptImage) {
           setReceiptViewerSrc(generatedReceiptImage);
           setReceiptPreviewOpen(true);

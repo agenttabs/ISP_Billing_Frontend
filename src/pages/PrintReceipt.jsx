@@ -19,6 +19,7 @@ import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName, normalizeCompanyName } fr
 
 const QZ_TRAY_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js";
 const RECEIPT_PRINTER_STORAGE_KEY = "isp_billing_receipt_printer_name";
+const RECEIPT_LOGO_SRC = "/dns_logo.png";
 let qzSecurityConfigured = false;
 
 const defaultForm = {
@@ -373,6 +374,7 @@ const openTestReceiptPrint = (config) => {
       `
     )
     .join("");
+  const receiptLogoUrl = `${window.location.origin}${RECEIPT_LOGO_SRC}`;
 
   receiptWindow.document.write(`
     <html>
@@ -398,6 +400,13 @@ const openTestReceiptPrint = (config) => {
             padding: 3mm;
           }
           .center { text-align: center; }
+          .logo {
+            display: block;
+            width: 58mm;
+            max-width: 100%;
+            height: auto;
+            margin: 0 auto 3mm;
+          }
           .title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
           .subtitle { font-size: 12px; color: #475569; margin-bottom: 12px; }
           .meta, .section-note { font-size: 12px; color: #334155; line-height: 1.55; }
@@ -422,7 +431,7 @@ const openTestReceiptPrint = (config) => {
       </head>
       <body>
         <div class="receipt">
-          <div class="center title">${config.CompanyName || "-"}</div>
+          <img class="logo" src="${receiptLogoUrl}" alt="${config.CompanyName || "-"}" />
           <div class="center title" style="font-size:15px;">${config.ReceiptTitle || "-"}</div>
           <div class="center subtitle">${config.ReceiptSubtitle || "-"}</div>
 

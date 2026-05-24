@@ -21,6 +21,23 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName } from "../utils/companyName";
 
+const BILLING_LOGO_SRC = "/dns_logo.png";
+
+const loadImageDataUrl = (src) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = reject;
+    image.src = src;
+  });
+
 export const formatCurrency = (value) =>
   `PHP ${Number(value || 0).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
@@ -269,13 +286,6 @@ export default function BillingStatementContent({
       }),
     [history]
   );
-  const selectedHistory = useMemo(() => {
-    if (!billingPeriod) {
-      return sortedPaymentHistory;
-    }
-
-    return getPaymentsForDueCycle(history, billingDueDate);
-  }, [billingDueDate, billingPeriod, history, sortedPaymentHistory]);
   const latestPayment = sortedPaymentHistory[0] || null;
   const monthlyDue = Number(client?.AmountDue || 0);
   const previousDueBalance = billingPeriod
@@ -305,7 +315,7 @@ export default function BillingStatementContent({
     };
   }, []);
 
-  const handleGeneratePdf = () => {
+  const handleGeneratePdf = async () => {
     if (!client) return;
 
     const doc = new jsPDF({
@@ -320,17 +330,28 @@ export default function BillingStatementContent({
       statementRange.start && statementRange.end
         ? `${formatDate(statementRange.start)} to ${formatDate(statementRange.end)}`
         : "-";
+    let logoDataUrl = "";
 
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, pageWidth, 34, "F");
+    try {
+      logoDataUrl = await loadImageDataUrl(BILLING_LOGO_SRC);
+    } catch {
+      logoDataUrl = "";
+    }
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text(companyName, 18, 14);
+    doc.setDrawColor(219, 228, 238);
+    doc.line(14, 34, pageWidth - 14, 34);
+
+    doc.setTextColor(15, 23, 42);
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, "PNG", 14, 8, 86, 13);
+    } else {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.text(companyName, 18, 14);
+    }
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text(statementTitle, 18, 22);
+    doc.text(statementTitle, logoDataUrl ? 112 : 18, logoDataUrl ? 16 : 22);
 
     doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
@@ -457,10 +478,14 @@ export default function BillingStatementContent({
       )}
 
       <Box sx={{ p: { xs: 3, md: 5 } }}>
-        <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4 }, background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #60a5fa 100%)", color: "#fff", borderRadius: 4, mb: 3 }}>
-          <Typography sx={{ fontSize: "0.9rem", letterSpacing: 1.5, opacity: 0.9 }}>{companyName}</Typography>
-          <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1, mt: 0.75 }}>{statementMonth}</Typography>
-          <Typography sx={{ mt: 1, opacity: 0.9 }}>Billing Statement</Typography>
+        <Box sx={{ px: { xs: 3, md: 5 }, py: { xs: 3, md: 4 }, background: "#fff", color: "#0f172a", border: "1px solid #dbe4ee", borderRadius: 2, mb: 3 }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} alignItems={{ xs: "flex-start", md: "center" }} justifyContent="space-between">
+            <Box component="img" src={BILLING_LOGO_SRC} alt={companyName} sx={{ width: { xs: "100%", sm: 320, md: 380 }, maxWidth: "100%", maxHeight: 72, objectFit: "contain", objectPosition: "left center" }} />
+            <Box sx={{ textAlign: { xs: "left", md: "right" } }}>
+              <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.1 }}>{statementMonth}</Typography>
+              <Typography sx={{ mt: 1, color: "#64748b" }}>Billing Statement</Typography>
+            </Box>
+          </Stack>
         </Box>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mb: 4 }}>
