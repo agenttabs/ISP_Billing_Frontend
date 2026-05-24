@@ -707,7 +707,8 @@ const buildEscPosReceiptData = async (receiptData) => {
   const printData = [
     {
       type: "raw",
-      format: "plain",
+      format: "command",
+      flavor: "plain",
       data: "\x1B\x40\x1B\x61\x01"
     }
   ];
@@ -723,21 +724,24 @@ const buildEscPosReceiptData = async (receiptData) => {
       },
       {
         type: "raw",
-        format: "plain",
+        format: "command",
+        flavor: "plain",
         data: "\n"
       }
     );
   } else {
     printData.push({
       type: "raw",
-      format: "plain",
+      format: "command",
+      flavor: "plain",
       data: `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`
     });
   }
 
   printData.push({
     type: "raw",
-    format: "plain",
+    format: "command",
+    flavor: "plain",
     data: lines.join("")
   });
 

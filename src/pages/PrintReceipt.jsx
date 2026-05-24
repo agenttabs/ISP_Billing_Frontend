@@ -50,6 +50,51 @@ const formatReceiptAmount = (value) =>
     maximumFractionDigits: 2
   });
 
+const loadReceiptLogoImage = () =>
+  new Promise((resolve) => {
+    if (typeof Image === "undefined") {
+      resolve(null);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = RECEIPT_LOGO_SRC;
+  });
+
+const createReceiptLogoBase64 = async () => {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  const image = await loadReceiptLogoImage();
+
+  if (!image) {
+    return "";
+  }
+
+  const width = 384;
+  const height = Math.max(
+    1,
+    Math.round(width / (image.naturalWidth / image.naturalHeight))
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return "";
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/png").split(",")[1] || "";
+};
+
 const THERMAL_RECEIPT_CHAR_WIDTH = 48;
 
 const createReceiptLine = (label, value, width = THERMAL_RECEIPT_CHAR_WIDTH) => {
@@ -258,16 +303,15 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
   throw new Error(`Xprinter printer was not found.${availableMessage}`);
 };
 
-const buildTestEscPosReceiptData = (config) => {
+const buildTestEscPosReceiptData = async (config) => {
   const paymentLines = [
     { method: "CASH", amount: 500, reference: "" },
     { method: "GCASH", amount: 1000, reference: "8039947123436" }
   ];
   const paymentMode = [...new Set(paymentLines.map((line) => line.method).filter(Boolean))].join("/");
+  const logoBase64 = await createReceiptLogoBase64();
   const lines = [
-    "\x1B\x40",
     "\x1B\x61\x01",
-    `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     config.ReceiptSubtitle ? `${fitReceiptText(config.ReceiptSubtitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n` : "",
     `${"=".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
@@ -312,13 +356,48 @@ const buildTestEscPosReceiptData = (config) => {
     "\x1D\x56\x00"
   );
 
-  return [
+  const printData = [
     {
       type: "raw",
-      format: "plain",
-      data: lines.join("")
+      format: "command",
+      flavor: "plain",
+      data: "\x1B\x40\x1B\x61\x01"
     }
   ];
+
+  if (logoBase64) {
+    printData.push(
+      {
+        type: "raw",
+        format: "image",
+        flavor: "base64",
+        data: logoBase64,
+        options: { language: "ESCPOS", dotDensity: "double" }
+      },
+      {
+        type: "raw",
+        format: "command",
+        flavor: "plain",
+        data: "\n"
+      }
+    );
+  } else {
+    printData.push({
+      type: "raw",
+      format: "command",
+      flavor: "plain",
+      data: `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`
+    });
+  }
+
+  printData.push({
+    type: "raw",
+    format: "command",
+    flavor: "plain",
+    data: lines.join("")
+  });
+
+  return printData;
 };
 
 const tryDirectTestPrint = async (config) => {
@@ -337,7 +416,7 @@ const tryDirectTestPrint = async (config) => {
   const printerName = await resolveReceiptPrinterName(qz, config.PreferredPrinterName);
   const printerConfig = qz.configs.create(printerName);
 
-  await qz.print(printerConfig, buildTestEscPosReceiptData(config));
+  await qz.print(printerConfig, await buildTestEscPosReceiptData(config));
 };
 
 const openTestReceiptPrint = (config) => {
@@ -747,8 +826,41 @@ export default function PrintReceipt() {
                 }}
               >
                 <Typography sx={{ fontWeight: 700, mb: 1, color: "#0f172a" }}>
-                  Preview Notes
+                  Receipt Preview
                 </Typography>
+                <Box
+                  sx={{
+                    width: "100%",
+                    maxWidth: 360,
+                    mb: 2,
+                    p: 2,
+                    borderRadius: 2,
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #e2e8f0"
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={RECEIPT_LOGO_SRC}
+                    alt={form.CompanyName || DEFAULT_COMPANY_NAME}
+                    sx={{
+                      display: "block",
+                      width: "100%",
+                      maxWidth: 280,
+                      height: "auto",
+                      mx: "auto",
+                      mb: 1.5
+                    }}
+                  />
+                  <Typography sx={{ textAlign: "center", fontWeight: 700, color: "#0f172a" }}>
+                    {form.ReceiptTitle || "-"}
+                  </Typography>
+                  {form.ReceiptSubtitle ? (
+                    <Typography sx={{ textAlign: "center", color: "#64748b", fontSize: 13 }}>
+                      {form.ReceiptSubtitle}
+                    </Typography>
+                  ) : null}
+                </Box>
                 <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
                   Company: {form.CompanyName || "-"}
                 </Typography>
