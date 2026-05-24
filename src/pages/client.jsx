@@ -226,6 +226,38 @@ const loadReceiptLogoImage = () =>
     image.src = RECEIPT_LOGO_SRC;
   });
 
+const createReceiptLogoBase64 = async () => {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  const image = await loadReceiptLogoImage();
+
+  if (!image) {
+    return "";
+  }
+
+  const width = 384;
+  const height = Math.max(
+    1,
+    Math.round(width / (image.naturalWidth / image.naturalHeight))
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return "";
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL("image/png").split(",")[1] || "";
+};
+
 const normalizeBooleanSetting = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -576,7 +608,7 @@ const createPaymentReceiptImage = async (receiptData) => {
   return canvas.toDataURL("image/png");
 };
 
-const buildEscPosReceiptData = (receiptData) => {
+const buildEscPosReceiptData = async (receiptData) => {
   const {
     clientName,
     accountName,
@@ -607,11 +639,10 @@ const buildEscPosReceiptData = (receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
+  const logoBase64 = await createReceiptLogoBase64();
 
   const lines = [
-    "\x1B\x40",
     "\x1B\x61\x01",
-    `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     config.ReceiptSubtitle
       ? `${fitReceiptText(config.ReceiptSubtitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n`
@@ -673,13 +704,44 @@ const buildEscPosReceiptData = (receiptData) => {
     "\x1D\x56\x00"
   );
 
-  return [
+  const printData = [
     {
       type: "raw",
       format: "plain",
-      data: lines.join("")
+      data: "\x1B\x40\x1B\x61\x01"
     }
   ];
+
+  if (logoBase64) {
+    printData.push(
+      {
+        type: "raw",
+        format: "image",
+        flavor: "base64",
+        data: logoBase64,
+        options: { language: "ESCPOS", dotDensity: "double" }
+      },
+      {
+        type: "raw",
+        format: "plain",
+        data: "\n"
+      }
+    );
+  } else {
+    printData.push({
+      type: "raw",
+      format: "plain",
+      data: `${fitReceiptText(normalizeCompanyName(config.CompanyName), THERMAL_RECEIPT_CHAR_WIDTH)}\n`
+    });
+  }
+
+  printData.push({
+    type: "raw",
+    format: "plain",
+    data: lines.join("")
+  });
+
+  return printData;
 };
 
 const loadQzTrayScript = () =>
@@ -860,7 +922,7 @@ const tryAutoPrintToXprinter = async (receiptData) => {
     receiptData?.receiptConfig?.PreferredPrinterName || ""
   );
   const config = qz.configs.create(printerName);
-  const data = buildEscPosReceiptData(receiptData);
+  const data = await buildEscPosReceiptData(receiptData);
 
   await qz.print(config, data);
 };
