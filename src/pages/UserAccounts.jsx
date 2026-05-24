@@ -44,6 +44,11 @@ const dayLabels = {
   SUNDAY: "Sun"
 };
 
+const PAYROLL_SCHEDULES = {
+  "15_END": "15 and End of Month",
+  "7_15_22_END": "7, 15, 22 and End of Month"
+};
+
 const normalizeScheduleDays = (value) => {
   const source = Array.isArray(value)
     ? value
@@ -54,6 +59,14 @@ const normalizeScheduleDays = (value) => {
   return [...new Set(source.map((item) => String(item || "").trim().toUpperCase()))]
     .filter((day) => WEEK_DAYS.includes(day));
 };
+
+const normalizePayrollSchedule = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return PAYROLL_SCHEDULES[normalized] ? normalized : "15_END";
+};
+
+const formatPayrollSchedule = (value) =>
+  PAYROLL_SCHEDULES[normalizePayrollSchedule(value)];
 
 const formatScheduleDays = (value) => {
   const days = normalizeScheduleDays(value);
@@ -83,6 +96,7 @@ const defaultForm = {
   email: "",
   contact: "",
   salary: "",
+  payrollSchedule: "15_END",
   restriction: "Default",
   scheduleDays: [...WEEK_DAYS]
 };
@@ -159,6 +173,7 @@ export default function UserAccounts() {
       email: user.Email || "",
       contact: user.Contact || "",
       salary: user.Salary || "",
+      payrollSchedule: normalizePayrollSchedule(user.PayrollSchedule),
       status: user.Status || "ACTIVE",
       restriction: user.Restriction || "Default",
       scheduleDays: getUserScheduleDays(user)
@@ -295,6 +310,26 @@ export default function UserAccounts() {
                   }
                   fullWidth
                 />
+                {String(form.type || "").toUpperCase() === "TECHNICIAN" ? (
+                  <TextField
+                    select
+                    label="Payroll Schedule"
+                    value={normalizePayrollSchedule(form.payrollSchedule)}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        payrollSchedule: event.target.value
+                      }))
+                    }
+                    fullWidth
+                    helperText="Used for technician payroll cutoff."
+                  >
+                    <MenuItem value="15_END">15 and End of Month</MenuItem>
+                    <MenuItem value="7_15_22_END">
+                      7, 15, 22 and End of Month
+                    </MenuItem>
+                  </TextField>
+                ) : null}
                 <TextField
                   label="Restriction"
                   value={form.restriction}
@@ -403,6 +438,7 @@ export default function UserAccounts() {
                   <TableCell>Type</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Schedule</TableCell>
+                  <TableCell>Payroll</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Contact</TableCell>
                   <TableCell align="center">Edit</TableCell>
@@ -422,6 +458,18 @@ export default function UserAccounts() {
                           label={formatScheduleDays(getUserScheduleDays(user))}
                           size="small"
                           color={getUserScheduleDays(user).length ? "success" : "warning"}
+                          variant="outlined"
+                        />
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {String(user.Type || "").toUpperCase() === "TECHNICIAN" ? (
+                        <Chip
+                          label={formatPayrollSchedule(user.PayrollSchedule)}
+                          size="small"
+                          color="primary"
                           variant="outlined"
                         />
                       ) : (

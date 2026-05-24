@@ -116,6 +116,12 @@ export default function Sidebar() {
       roles: ["ADMIN", "TECHNICIAN"]
     },
     {
+      text: "Payroll",
+      path: "/reports/technician-payroll",
+      icon: <ReceiptLongOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
       text: "Repair",
       path: "/repair-information",
       icon: <BuildCircleOutlined />,

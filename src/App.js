@@ -34,6 +34,7 @@ import SystemSettings from "./pages/SystemSettings";
 import SystemLogs from "./pages/SystemLogs";
 import TechReport from "./pages/TechReport";
 import TechnicianClientView from "./pages/TechnicianClientView";
+import TechnicianPayrollReport from "./pages/TechnicianPayrollReport";
 import TransactionVerification from "./pages/TransactionVerification";
 import UserAccounts from "./pages/UserAccounts";
 
@@ -96,6 +97,7 @@ function App() {
             />
             <Route path="/reports/audit-logs" element={<SystemLogs />} />
             <Route path="/reports/pull-out" element={<PullOutReport />} />
+            <Route path="/reports/technician-payroll" element={<TechnicianPayrollReport />} />
             <Route path="/account-users" element={<UserAccounts />} />
             <Route path="/sms-recepients" element={<SMSRecepients />} />
             <Route path="/sms-collection" element={<SMSGateway />} />

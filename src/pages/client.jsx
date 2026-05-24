@@ -1716,7 +1716,8 @@ function ClientList() {
   const [repairDialog, setRepairDialog] = useState({
     open: false,
     technicianId: "",
-    repairText: ""
+    repairText: "",
+    smsMessage: ""
   });
   const [technicians, setTechnicians] = useState([]);
   const [repairSmsTemplate, setRepairSmsTemplate] = useState(null);
@@ -1850,7 +1851,8 @@ function ClientList() {
         Issue: repairDialog.repairText || ""
       })
     : "";
-  const repairDetailsDisplayValue = repairSmsPreview || repairDialog.repairText;
+  const repairDetailsDisplayValue =
+    repairDialog.smsMessage || repairDialog.repairText || repairSmsPreview;
 
   const refreshDhcpLeaseComments = useCallback(async () => {
     try {
@@ -3527,7 +3529,8 @@ function ClientList() {
     setRepairDialog({
       open: true,
       technicianId: "",
-      repairText: ""
+      repairText: "",
+      smsMessage: ""
     });
 
     if (!technicians.length) {
@@ -3543,7 +3546,8 @@ function ClientList() {
     setRepairDialog({
       open: false,
       technicianId: "",
-      repairText: ""
+      repairText: "",
+      smsMessage: ""
     });
     setRepairSaving(false);
   };
@@ -3559,8 +3563,10 @@ function ClientList() {
       return;
     }
 
-    if (!repairDialog.repairText.trim() && !repairSmsTemplate?.Body) {
-      showMessage("Repair Details Required", "Please enter the repair details.", "warning");
+    const finalSmsMessage = repairDetailsDisplayValue.trim();
+
+    if (!finalSmsMessage) {
+      showMessage("SMS Details Required", "Please enter the SMS details.", "warning");
       return;
     }
 
@@ -3570,7 +3576,8 @@ function ClientList() {
       const { data } = await API.post(`/clients/${selectedClient._id}/repair`, {
         technicianId: repairDialog.technicianId,
         technicianName: selectedRepairTechnician?.Name || "",
-        repairText: repairDialog.repairText.trim()
+        repairText: finalSmsMessage,
+        smsMessage: finalSmsMessage
       });
 
       handleCloseRepairDialog();
@@ -7700,19 +7707,20 @@ function ClientList() {
             </TextField>
 
             <TextField
-              label="Repair SMS Details"
+              label="SMS Details"
               multiline
               minRows={8}
               value={repairDetailsDisplayValue}
               onChange={(event) =>
                 setRepairDialog((prev) => ({
                   ...prev,
-                  repairText: event.target.value
+                  repairText: event.target.value,
+                  smsMessage: event.target.value
                 }))
               }
-              placeholder="Choose a technician and type the repair issue. This box shows the SMS preview."
+              placeholder="Type the repair SMS details to send to the selected technician."
               fullWidth
-              helperText="This box is the SMS message that will be sent to the selected technician."
+              helperText="Editable SMS message that will be sent to the selected technician."
             />
           </Paper>
         </DialogContent>

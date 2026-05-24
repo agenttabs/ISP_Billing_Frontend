@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   IconButton,
+  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -89,8 +90,17 @@ const defaultForm = {
   Amount: "",
   Invoice: "",
   LogDate: getTodayInputDate(),
-  Docs: ""
+  Docs: "",
+  TechnicianId: "",
+  TechnicianName: ""
 };
+
+const expenseTypes = [
+  "Financial expenses",
+  "Cash Advance",
+  "Materials",
+  "Family Expense"
+];
 
 const formatDisplayAmount = (value) => {
   const parsed = Number(String(value || "").replace(/,/g, ""));
@@ -130,6 +140,7 @@ export default function ExpenseInput() {
   const [form, setForm] = useState(defaultForm);
   const [editingId, setEditingId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [technicians, setTechnicians] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
@@ -147,8 +158,18 @@ export default function ExpenseInput() {
     }
   };
 
+  const loadTechnicians = async () => {
+    try {
+      const { data } = await API.get("/auth/technicians");
+      setTechnicians(Array.isArray(data) ? data : []);
+    } catch (_err) {
+      setTechnicians([]);
+    }
+  };
+
   useEffect(() => {
     loadExpenses();
+    loadTechnicians();
   }, []);
 
   const filteredRows = useMemo(() => {
@@ -171,8 +192,10 @@ export default function ExpenseInput() {
         row.Type,
         row.Invoice,
         row.LogDate,
+        row.CreatedBy,
         row.InCharge,
-        row.Amount
+        row.Amount,
+        row.TechnicianName
       ]
         .join(" ")
         .toLowerCase()
@@ -203,6 +226,11 @@ export default function ExpenseInput() {
         LogDate: isCashier ? getTodayInputDate() : form.LogDate
       };
 
+      if (String(payload.Type || "").trim().toUpperCase() !== "CASH ADVANCE") {
+        payload.TechnicianId = "";
+        payload.TechnicianName = "";
+      }
+
       if (editingId) {
         await API.put(`/expenses/${editingId}`, payload);
         setSuccess("Expense updated successfully.");
@@ -229,7 +257,9 @@ export default function ExpenseInput() {
       Amount: row.Amount || "",
       Invoice: row.Invoice || "",
       LogDate: normalizeDateForInput(row.LogDate),
-      Docs: row.Docs || ""
+      Docs: row.Docs || "",
+      TechnicianId: row.TechnicianId || "",
+      TechnicianName: row.TechnicianName || ""
     });
     setError("");
     setSuccess("");
@@ -290,18 +320,58 @@ export default function ExpenseInput() {
                     setForm((prev) => ({ ...prev, Name: event.target.value }))
                   }
                   fullWidth
-                  required
                 />
                 <TextField
+                  select
                   label="Type"
                   value={form.Type}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, Type: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      Type: event.target.value,
+                      ...(String(event.target.value || "").trim().toUpperCase() === "CASH ADVANCE"
+                        ? {}
+                        : { TechnicianId: "", TechnicianName: "" })
+                    }))
                   }
                   fullWidth
                   required
-                />
+                >
+                  {expenseTypes.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </TextField>
               </Stack>
+
+              {String(form.Type || "").trim().toUpperCase() === "CASH ADVANCE" ? (
+                <TextField
+                  select
+                  label="Technician"
+                  value={form.TechnicianId}
+                  onChange={(event) => {
+                    const selected = technicians.find(
+                      (technician) =>
+                        String(technician.ID || "") === String(event.target.value)
+                    );
+                    setForm((prev) => ({
+                      ...prev,
+                      TechnicianId: String(selected?.ID || ""),
+                      TechnicianName: selected?.Name || ""
+                    }));
+                  }}
+                  fullWidth
+                  required
+                  helperText="This amount will be deducted from the technician payroll cutoff."
+                >
+                  {technicians.map((technician) => (
+                    <MenuItem key={technician.ID} value={technician.ID}>
+                      {technician.Name || technician.Username}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : null}
 
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                 <TextField
@@ -320,7 +390,6 @@ export default function ExpenseInput() {
                     setForm((prev) => ({ ...prev, Invoice: event.target.value }))
                   }
                   fullWidth
-                  required
                 />
                 <TextField
                   label="Log Date"
@@ -397,7 +466,8 @@ export default function ExpenseInput() {
                   <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Docs</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>In Charge</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Technician</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
                   <TableCell sx={{ fontWeight: 700 }} align="center">
                     Action
                   </TableCell>
@@ -406,7 +476,7 @@ export default function ExpenseInput() {
               <TableBody>
                 {!filteredRows.length ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={9} align="center">
                       No expense records found.
                     </TableCell>
                   </TableRow>
@@ -419,7 +489,8 @@ export default function ExpenseInput() {
                       <TableCell>{row.Type || "-"}</TableCell>
                       <TableCell>{formatDisplayAmount(row.Amount)}</TableCell>
                       <TableCell>{row.Docs || "-"}</TableCell>
-                      <TableCell>{row.InCharge || "-"}</TableCell>
+                      <TableCell>{row.TechnicianName || "-"}</TableCell>
+                      <TableCell>{row.CreatedBy || row.InCharge || "-"}</TableCell>
                       <TableCell align="center">
                         {canEditRow(row) ? (
                           <IconButton color="primary" onClick={() => handleEdit(row)}>
