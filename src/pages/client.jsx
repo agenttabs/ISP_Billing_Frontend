@@ -386,6 +386,7 @@ const createPaymentReceiptImage = async (receiptData) => {
   const rows = paymentRows.length
     ? paymentRows
     : [{ Method: receiptData?.paymentMethod || "-", Amount: receiptData?.amountPaid || 0 }];
+  const customerName = String(receiptData?.clientName || "-").toUpperCase();
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, receiptData?.paymentMethod || "-");
   const receiptHeaderReference =
     String(receiptData?.salesInvoice || "").trim() ||
@@ -408,8 +409,7 @@ const createPaymentReceiptImage = async (receiptData) => {
     { type: "divider" },
     { type: "row", label: "Receipt No.", value: receiptData?.paymentReceipt || "-" },
     { type: "row", label: "Date", value: receiptData?.paymentDate || "-" },
-    { type: "row", label: "Client", value: fitReceiptText(receiptData?.clientName || "-", 28) },
-    { type: "row", label: "Account", value: fitReceiptText(receiptData?.accountName || "-", 28) }
+    { type: "row", label: "Name", value: fitReceiptText(customerName, 28) }
   );
 
   if (receiptPlanAmount) {
@@ -523,6 +523,15 @@ const createPaymentReceiptImage = async (receiptData) => {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(-Math.PI / 7);
+  ctx.fillStyle = "rgba(15, 23, 42, 0.055)";
+  ctx.font = "900 58px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(companyName, 0, 0);
+  ctx.restore();
+
   const drawText = (text, x, y, options = {}) => {
     ctx.fillStyle = options.color || "#000000";
     ctx.font = `${options.weight || 500} ${options.size || 20}px "Courier New", Consolas, monospace`;
@@ -611,7 +620,6 @@ const createPaymentReceiptImage = async (receiptData) => {
 const buildEscPosReceiptData = async (receiptData) => {
   const {
     clientName,
-    accountName,
     planAmount,
     contactNumber,
     paymentReceipt,
@@ -634,6 +642,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     ...(receiptConfig || {})
   };
   const paymentRows = getReceiptPaymentRows(paymentBreakdown);
+  const customerName = String(clientName || "-").toUpperCase();
   const receiptPaymentMode = getReceiptPaymentMode(paymentRows, paymentMethod || "-");
   const receiptHeaderReference =
     String(salesInvoice || "").trim() ||
@@ -651,8 +660,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     "\x1B\x61\x00",
     `${createReceiptLine("Receipt No.", paymentReceipt)}\n`,
     `${createReceiptLine("Date", paymentDate)}\n`,
-    `${createReceiptLine("Client", clientName)}\n`,
-    `${createReceiptLine("Account", accountName)}\n`,
+    `${createReceiptLine("Name", customerName)}\n`,
     receiptPlanAmount ? `${createReceiptLine("Plan", receiptPlanAmount)}\n` : "",
     config.ShowContactNumber
       ? `${createReceiptLine("Contact", contactNumber || "-")}\n`
@@ -1416,7 +1424,6 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 
   const {
     clientName,
-    accountName,
     planAmount,
     contactNumber,
     paymentReceipt,
@@ -1451,6 +1458,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         .join("")
     : `<div class="row"><span class="label">${escapeHtml(paymentMethod)}</span><span class="value">PHP ${Number(amountPaid || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>`;
   const receiptPaymentRows = getReceiptPaymentRows(paymentBreakdown);
+  const customerName = String(clientName || "-").toUpperCase();
   const receiptPaymentMode = getReceiptPaymentMode(receiptPaymentRows, paymentMethod || "-");
   const receiptHeaderReference =
     String(salesInvoice || "").trim() ||
@@ -1542,8 +1550,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 
       <div class="row"><span class="label">Receipt No.</span><span class="value">${escapeHtml(paymentReceipt)}</span></div>
       <div class="row"><span class="label">Date</span><span class="value">${escapeHtml(paymentDate)}</span></div>
-      <div class="row"><span class="label">Client</span><span class="value wrap">${escapeHtml(clientName)}</span></div>
-      <div class="row"><span class="label">Account</span><span class="value wrap">${escapeHtml(accountName)}</span></div>
+      <div class="row"><span class="label">Name</span><span class="value wrap">${escapeHtml(customerName)}</span></div>
       ${
         receiptPlanAmount
           ? `<div class="row"><span class="label">Plan</span><span class="value wrap">${escapeHtml(receiptPlanAmount)}</span></div>`

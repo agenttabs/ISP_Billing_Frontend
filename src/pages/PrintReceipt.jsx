@@ -319,8 +319,7 @@ const buildTestEscPosReceiptData = async (config) => {
     `${createReceiptLine("Receipt No.", "PR-TEST-0001")}\n`,
     `${createReceiptLine("Invoice No.", "SI-TEST-0001")}\n`,
     `${createReceiptLine("Date", new Date().toLocaleString("en-PH"))}\n`,
-    `${createReceiptLine("Client", "Juan Dela Cruz")}\n`,
-    `${createReceiptLine("Account", "test-account")}\n`,
+    `${createReceiptLine("Name", "JUAN DELA CRUZ")}\n`,
     `${createReceiptLine("Plan", "PHP 1,000.00")}\n`,
     config.ShowContactNumber ? `${createReceiptLine("Contact", "09167700957")}\n` : "",
     ...(config.ShowSubscriptionCover
@@ -517,8 +516,7 @@ const openTestReceiptPrint = (config) => {
           <div class="meta">Receipt No.: PR-TEST-0001</div>
           <div class="meta">Invoice No.: SI-TEST-0001</div>
           <div class="meta">Date: ${new Date().toLocaleString("en-PH")}</div>
-          <div class="meta">Client: Juan Dela Cruz</div>
-          <div class="meta">Account: test-account</div>
+          <div class="meta">Name: JUAN DELA CRUZ</div>
           <div class="meta">Plan: PHP 1,000.00</div>
           ${config.ShowContactNumber ? '<div class="meta">Contact: 09167700957</div>' : ""}
           ${config.ShowSubscriptionCover ? '<div class="meta">Subscription: May 15, 2026 to June 14, 2026</div>' : ""}
