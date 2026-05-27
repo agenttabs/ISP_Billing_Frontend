@@ -94,6 +94,15 @@ const getPaymentDate = (row) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const getDateOnlyTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+};
+
 const getBillingDueDate = (client, billingPeriod, fallbackRange) => {
   const year = Number(billingPeriod?.year);
   const month = Number(billingPeriod?.month);
@@ -201,7 +210,7 @@ const getNextBillingDueDate = (billingDueDate) => {
   );
 };
 
-const isPaymentForDueCycle = (date, billingDueDate) => {
+const isDateInDueCycle = (date, billingDueDate) => {
   if (!date || !billingDueDate) {
     return false;
   }
@@ -211,11 +220,59 @@ const isPaymentForDueCycle = (date, billingDueDate) => {
     return false;
   }
 
-  const cycleStart = new Date(dueDate);
-  cycleStart.setHours(0, 0, 0, 0);
+  const targetTime = getDateOnlyTime(date);
+  const cycleStartTime = getDateOnlyTime(dueDate);
   const nextDueDate = getNextBillingDueDate(dueDate);
+  const nextDueTime = nextDueDate ? getDateOnlyTime(nextDueDate) : null;
 
-  return date >= cycleStart && (!nextDueDate || date < nextDueDate);
+  return (
+    targetTime !== null &&
+    cycleStartTime !== null &&
+    targetTime >= cycleStartTime &&
+    (nextDueTime === null || targetTime < nextDueTime)
+  );
+};
+
+const getCoverDates = (row) => {
+  const coverText = String(row?.Cover || row?.SubscriptionCover || "").trim();
+  const dates = [];
+
+  if (!coverText) {
+    return dates;
+  }
+
+  const monthDatePattern =
+    /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b/gi;
+  const isoDatePattern = /\b\d{4}-\d{2}-\d{2}\b/g;
+  const slashDatePattern = /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g;
+  const matches = [
+    ...(coverText.match(monthDatePattern) || []),
+    ...(coverText.match(isoDatePattern) || []),
+    ...(coverText.match(slashDatePattern) || [])
+  ];
+
+  matches.forEach((match) => {
+    const date = new Date(match);
+    if (!Number.isNaN(date.getTime())) {
+      dates.push(date);
+    }
+  });
+
+  return dates;
+};
+
+const isPrintEntryForDueCycle = (row, billingDueDate) => {
+  const dueDate = new Date(billingDueDate);
+  if (Number.isNaN(dueDate.getTime())) {
+    return false;
+  }
+
+  const rowDueDate = row?.DueDate ? new Date(row.DueDate) : null;
+  if (rowDueDate && isDateInDueCycle(rowDueDate, dueDate)) {
+    return true;
+  }
+
+  return getCoverDates(row).some((coverDate) => isDateInDueCycle(coverDate, dueDate));
 };
 
 const getPaymentAmount = (row) =>
@@ -223,7 +280,7 @@ const getPaymentAmount = (row) =>
 
 const getPaymentsForDueCycle = (history, billingDueDate) =>
   (history || [])
-    .filter((row) => isPaymentForDueCycle(getPaymentDate(row), billingDueDate))
+    .filter((row) => isPrintEntryForDueCycle(row, billingDueDate))
     .sort((a, b) => {
       const left = getPaymentDate(a)?.getTime() || 0;
       const right = getPaymentDate(b)?.getTime() || 0;
