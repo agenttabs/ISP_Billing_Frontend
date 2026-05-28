@@ -501,7 +501,7 @@ const createPaymentReceiptImage = async (receiptData) => {
     { type: "divider" },
     {
       type: "center",
-      text: config.FooterNote || "Thank you for your payment.",
+      text: config.FooterNote || defaultReceiptPrintConfig.FooterNote,
       size: 20,
       weight: 800
     }
@@ -710,7 +710,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     `${createReceiptLine("Notes", notes || "-")}\n`,
     "\n",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    `${fitReceiptText(config.FooterNote || defaultReceiptPrintConfig.FooterNote, THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     "\x1B\x64\x04",
     "\x1D\x56\x00"
   );
@@ -1596,7 +1596,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 
       <div class="divider"></div>
 
-      <div class="center muted">${escapeHtml(config.FooterNote || "Thank you for your payment.")}</div>
+      <div class="center muted">${escapeHtml(config.FooterNote || defaultReceiptPrintConfig.FooterNote)}</div>
     </div>
     <script>
       window.onload = function () {
