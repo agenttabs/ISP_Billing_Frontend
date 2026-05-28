@@ -378,7 +378,10 @@ const createPaymentReceiptImage = async (receiptData) => {
     return "";
   }
 
-  const config = receiptData?.receiptConfig || defaultReceiptPrintConfig;
+  const config = {
+    ...defaultReceiptPrintConfig,
+    ...(receiptData?.receiptConfig || {})
+  };
   const companyName = normalizeCompanyName(config.CompanyName);
   const paymentRows = Array.isArray(receiptData?.paymentBreakdown)
     ? receiptData.paymentBreakdown
@@ -1873,6 +1876,13 @@ function ClientList() {
     title: "",
     message: ""
   });
+  const [paymentDetailsConfirm, setPaymentDetailsConfirm] = useState({
+    open: false,
+    title: "",
+    message: "",
+    severity: "warning",
+    onConfirm: null
+  });
   const [smsConfirmDialog, setSmsConfirmDialog] = useState({
     open: false,
     client: null
@@ -3338,23 +3348,6 @@ function ClientList() {
         /maribank|instapay|transfer result/i.test(String(ocrText || ""))
           ? ""
           : extractReceiverLast4(ocrText);
-      const normalizedExtractedAmount = String(extractedAmount || "").trim();
-
-      if (!normalizedExtractedAmount || Number(normalizedExtractedAmount) <= 0) {
-        if (previewUrl) {
-          URL.revokeObjectURL(previewUrl);
-        }
-        setReceiptPreview("");
-        setReceiptPreviewOpen(false);
-        setOcrLoading(false);
-        setOcrMessage("No amount detected from the receipt image.");
-        showMessage(
-          "Receipt Amount Required",
-          "Unable to detect the payment amount from the uploaded receipt. Please use a clearer image or enter it manually.",
-          "warning"
-        );
-        return;
-      }
 
       setPaymentEntries((prev) => {
         const isStarterEmptyEntry = (entry) => {
@@ -3420,7 +3413,7 @@ function ClientList() {
 
         setOcrMessage(messageParts.join(" | "));
       } else {
-        setOcrMessage("No receipt details detected. You can type them manually.");
+        setOcrMessage("Receipt image attached. You can type the amount and reference manually.");
       }
     } catch (error) {
       console.error("OCR ERROR:", error);
@@ -3566,6 +3559,64 @@ function ClientList() {
           variant="contained"
           color={clientActionConfirm.action === "pullout" ? "warning" : "primary"}
           onClick={handleConfirmClientAction}
+          sx={{ textTransform: "none", fontWeight: 700 }}
+        >
+          Yes
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  const closePaymentDetailsConfirm = () => {
+    setPaymentDetailsConfirm({
+      open: false,
+      title: "",
+      message: "",
+      severity: "warning",
+      onConfirm: null
+    });
+  };
+
+  const renderPaymentDetailsConfirmDialog = () => (
+    <Dialog
+      open={paymentDetailsConfirm.open}
+      onClose={closePaymentDetailsConfirm}
+      maxWidth="xs"
+      fullWidth
+      sx={{ zIndex: 20000 }}
+      BackdropProps={{
+        sx: { zIndex: 19999 }
+      }}
+      PaperProps={{
+        sx: { zIndex: 20001, borderRadius: 3 }
+      }}
+    >
+      <DialogTitle sx={{ fontWeight: 800 }}>
+        {paymentDetailsConfirm.title || "Confirm Payment Details"}
+      </DialogTitle>
+      <DialogContent>
+        <Alert severity={paymentDetailsConfirm.severity || "warning"} sx={{ mb: 2 }}>
+          {paymentDetailsConfirm.message || "Are you sure your input payment details are correct?"}
+        </Alert>
+        {paymentDetailsConfirm.message ? null : (
+          <Typography>
+            Please confirm the amount, reference number, transfer date, and receiver details before saving.
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={closePaymentDetailsConfirm} sx={{ textTransform: "none", fontWeight: 700 }}>
+          No
+        </Button>
+        <Button
+          variant="contained"
+          onClick={() => {
+            const onConfirm = paymentDetailsConfirm.onConfirm;
+            closePaymentDetailsConfirm();
+            if (onConfirm) {
+              onConfirm();
+            }
+          }}
           sx={{ textTransform: "none", fontWeight: 700 }}
         >
           Yes
@@ -4366,10 +4417,16 @@ function ClientList() {
           return entry;
         }
 
-        return {
+        const nextEntry = {
           ...entry,
           [field]: value
         };
+
+        if (field === "amount") {
+          nextEntry.receiptAmount = value;
+        }
+
+        return nextEntry;
       })
     );
   };
@@ -4452,7 +4509,7 @@ function ClientList() {
     setReceiptPreviewOpen(true);
   };
 
-  const handleSavePayment = async () => {
+  const handleSavePayment = async (options = {}) => {
     if (paymentSaving) {
       return;
     }
@@ -4544,6 +4601,21 @@ function ClientList() {
       return;
     }
 
+    const hasUploadedNonCashReceipt = normalizedPaymentEntries.some(
+      (entry) => entry.method !== "CASH" && entry.receiptImageDataUrl
+    );
+
+    if (hasUploadedNonCashReceipt && !options?.confirmed) {
+      setPaymentDetailsConfirm({
+        open: true,
+        title: "Confirm Payment Details",
+        message: "",
+        severity: "warning",
+        onConfirm: () => handleSavePayment({ confirmed: true })
+      });
+      return;
+    }
+
     setPaymentSaving(true);
 
     try {
@@ -4580,6 +4652,7 @@ function ClientList() {
           throw documentError;
         }
 
+        if (!options?.acceptUsedReference) {
         try {
           await API.post("/payments/validate-references", {
             entries: normalizedPaymentEntries
@@ -4603,15 +4676,23 @@ function ClientList() {
           const usedByAccounts = exceededRef?.usedByAccounts?.length
             ? ` Already used by: ${exceededRef.usedByAccounts.join(", ")}.`
             : "";
+          const duplicateMessage = `${validationError.response?.data?.error || "One or more non-cash references already exceed the allowed receipt amount."}${usedByAccounts}`;
 
-          showMessage(
-            "Duplicate Reference Error",
-            `${validationError.response?.data?.error || "One or more non-cash references already exceed the allowed receipt amount."}${usedByAccounts}`,
-            "error"
-          );
+          setPaymentDetailsConfirm({
+            open: true,
+            title: "Duplicate Reference Detected",
+            message: `${duplicateMessage} Are you sure you want to accept this record even it's been used?`,
+            severity: "warning",
+            onConfirm: () =>
+              handleSavePayment({
+                confirmed: true,
+                acceptUsedReference: true
+              })
+          });
           throw Object.assign(new Error("Payment reference validation failed."), {
             paymentValidationHandled: true
           });
+        }
         }
 
       const balance = totalAmountToPay - amountPaid;
@@ -4816,6 +4897,9 @@ function ClientList() {
       };
       handleClosePaymentModal();
 
+      const latestReceiptConfig = await loadReceiptPrintConfig();
+      receiptPayload.receiptConfig = latestReceiptConfig;
+
       if (shouldOpenGeneratedReceiptAfterSave) {
         const generatedReceiptImage = await createPaymentReceiptImage(receiptPayload);
         if (generatedReceiptImage) {
@@ -4855,9 +4939,6 @@ function ClientList() {
           );
         }
       }
-
-      const latestReceiptConfig = await loadReceiptPrintConfig();
-      receiptPayload.receiptConfig = latestReceiptConfig;
 
       if (latestReceiptConfig?.EnablePrinting && hasCashPaymentEntry) {
         try {
@@ -5469,6 +5550,7 @@ function ClientList() {
           {renderClientFormActions()}
         </Paper>
         {renderClientActionConfirmDialog()}
+        {renderPaymentDetailsConfirmDialog()}
         {renderMessageDialog()}
       </Box>
     );
@@ -7628,6 +7710,7 @@ function ClientList() {
       </Dialog>
 
       {renderClientActionConfirmDialog()}
+      {renderPaymentDetailsConfirmDialog()}
       {renderMessageDialog()}
 
       <Dialog
