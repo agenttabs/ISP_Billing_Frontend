@@ -199,7 +199,7 @@ const toSalesInvoiceNumber = (value) => {
 const defaultReceiptPrintConfig = {
   Name: "Default Thermal Receipt",
   CompanyName: DEFAULT_COMPANY_NAME,
-  ReceiptTitle: "Official Payment Receipt",
+  ReceiptTitle: "Acknowledgement Receipt",
   ReceiptSubtitle: "",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "",
@@ -401,7 +401,7 @@ const createPaymentReceiptImage = async (receiptData) => {
   const lineHeight = 30;
   const dividerHeight = 34;
   const lines = [
-    { type: "center", text: config.ReceiptTitle || "Official Payment Receipt", size: 22, weight: 700 }
+    { type: "center", text: config.ReceiptTitle || defaultReceiptPrintConfig.ReceiptTitle, size: 22, weight: 700 }
   ];
 
   if (config.ReceiptSubtitle) {
@@ -655,7 +655,7 @@ const buildEscPosReceiptData = async (receiptData) => {
 
   const lines = [
     "\x1B\x61\x01",
-    `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    `${fitReceiptText(config.ReceiptTitle || defaultReceiptPrintConfig.ReceiptTitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     config.ReceiptSubtitle
       ? `${fitReceiptText(config.ReceiptSubtitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n`
       : "",
@@ -1541,7 +1541,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     <div class="receipt">
       <div class="center">
         <img class="logo" src="${receiptLogoUrl}" alt="${escapeHtml(normalizeCompanyName(config.CompanyName))}" />
-        <div>${escapeHtml(config.ReceiptTitle || "Official Payment Receipt")}</div>
+        <div>${escapeHtml(config.ReceiptTitle || defaultReceiptPrintConfig.ReceiptTitle)}</div>
         ${
           config.ReceiptSubtitle
             ? `<div class="muted">${escapeHtml(config.ReceiptSubtitle)}</div>`
@@ -1993,6 +1993,22 @@ function ClientList() {
         UseDirectPrint: normalizeBooleanSetting(
           data?.UseDirectPrint,
           defaultReceiptPrintConfig.UseDirectPrint
+        ),
+        ShowSubscriptionCover: normalizeBooleanSetting(
+          data?.ShowSubscriptionCover,
+          defaultReceiptPrintConfig.ShowSubscriptionCover
+        ),
+        ShowContactNumber: normalizeBooleanSetting(
+          data?.ShowContactNumber,
+          defaultReceiptPrintConfig.ShowContactNumber
+        ),
+        ShowReference: normalizeBooleanSetting(
+          data?.ShowReference,
+          defaultReceiptPrintConfig.ShowReference
+        ),
+        ShowCreatedBy: normalizeBooleanSetting(
+          data?.ShowCreatedBy,
+          defaultReceiptPrintConfig.ShowCreatedBy
         )
       };
       setReceiptPrintConfig(nextConfig);

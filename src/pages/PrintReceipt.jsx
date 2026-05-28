@@ -25,7 +25,7 @@ let qzSecurityConfigured = false;
 const defaultForm = {
   Name: "Default Thermal Receipt",
   CompanyName: DEFAULT_COMPANY_NAME,
-  ReceiptTitle: "Official Payment Receipt",
+  ReceiptTitle: "Acknowledgement Receipt",
   ReceiptSubtitle: "",
   FooterNote: "Thank you for your payment.",
   PreferredPrinterName: "----------",
@@ -312,7 +312,7 @@ const buildTestEscPosReceiptData = async (config) => {
   const logoBase64 = await createReceiptLogoBase64();
   const lines = [
     "\x1B\x61\x01",
-    `${fitReceiptText(config.ReceiptTitle || "Official Payment Receipt", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    `${fitReceiptText(config.ReceiptTitle || defaultForm.ReceiptTitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     config.ReceiptSubtitle ? `${fitReceiptText(config.ReceiptSubtitle, THERMAL_RECEIPT_CHAR_WIDTH)}\n` : "",
     `${"=".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     "\x1B\x61\x00",
