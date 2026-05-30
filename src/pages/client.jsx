@@ -196,19 +196,32 @@ const toSalesInvoiceNumber = (value) => {
   return raw.startsWith("SI") ? raw : `SI-${raw}`;
 };
 
+const DEFAULT_FOOTER_NOTE = "Please keep this receipt as proof of payment.\nThank you for your payment.";
+
 const defaultReceiptPrintConfig = {
   Name: "Default Thermal Receipt",
   CompanyName: DEFAULT_COMPANY_NAME,
   ReceiptTitle: "Acknowledgement Receipt",
   ReceiptSubtitle: "",
-  FooterNote: "Thank you for your payment.",
+  FooterNote: DEFAULT_FOOTER_NOTE,
   PreferredPrinterName: "",
+  PrinterConnectionType: "USB",
+  NetworkPrinterHost: "",
+  NetworkPrinterPort: "9100",
   EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,
   ShowContactNumber: true,
   ShowReference: true,
   ShowCreatedBy: true
+};
+
+const isNetworkReceiptPrinter = (config = {}) =>
+  String(config.PrinterConnectionType || "").trim().toUpperCase() === "NETWORK";
+
+const normalizeReceiptPrinterPort = (value) => {
+  const port = Number(String(value || "").trim());
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : 9100;
 };
 
 const RECEIPT_LOGO_SRC = "/dns_logo.png";
@@ -284,6 +297,29 @@ const formatReceiptPlanAmount = (value) => {
   const amount = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(amount) && amount > 0 ? `PHP ${formatReceiptAmount(amount)}` : "";
 };
+
+const formatReceiptDate = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value || "").trim();
+  }
+
+  return date.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+};
+
+const getReceiptFooterLines = (value, fallback = DEFAULT_FOOTER_NOTE) =>
+  String(value || fallback || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
 const fitReceiptText = (value, maxLength = 32) => {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
@@ -373,6 +409,21 @@ const getReceiptHeaderReference = (paymentBreakdown, fallback = "") => {
   return rowsWithReference.length ? "" : fallback || "";
 };
 
+const resolveReceiptHistoryNextDueDate = (row, client = null) => {
+  if (row?.NextDueDate) {
+    return row.NextDueDate;
+  }
+
+  const sourceDueDate = row?.DueDate || client?.DueDate || "";
+  const anchorDay =
+    Number(row?.SubscriptionCover) ||
+    Number(client?.SubscriptionCover) ||
+    Number(row?.Cover);
+  const computedNextDueDate = addOneMonthToDate(sourceDueDate, anchorDay);
+
+  return computedNextDueDate?.toISOString?.() || client?.DueDate || "";
+};
+
 const createPaymentReceiptImage = async (receiptData) => {
   if (typeof document === "undefined") {
     return "";
@@ -395,6 +446,8 @@ const createPaymentReceiptImage = async (receiptData) => {
     String(receiptData?.salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(receiptData?.planAmount);
+  const receiptNextDueDate = formatReceiptDate(receiptData?.nextDueDate);
+  const footerLines = getReceiptFooterLines(config.FooterNote, defaultReceiptPrintConfig.FooterNote);
   const receiptLogo = await loadReceiptLogoImage();
   const width = 640;
   const paddingX = 56;
@@ -431,6 +484,17 @@ const createPaymentReceiptImage = async (receiptData) => {
         text
       }))
     );
+  }
+
+  if (receiptNextDueDate) {
+    lines.push({ type: "miniDivider" });
+    lines.push({
+      type: "row",
+      label: "Next Due Date",
+      value: receiptNextDueDate,
+      color: "#d32f2f",
+      weight: 800
+    });
   }
 
   lines.push(
@@ -499,12 +563,12 @@ const createPaymentReceiptImage = async (receiptData) => {
   lines.push(
     { type: "text", text: `Notes: ${fitReceiptText(receiptData?.notes || "-", 44)}` },
     { type: "divider" },
-    {
+    ...footerLines.map((line) => ({
       type: "center",
-      text: config.FooterNote || defaultReceiptPrintConfig.FooterNote,
+      text: line,
       size: 20,
       weight: 800
-    }
+    }))
   );
 
   const height =
@@ -594,6 +658,12 @@ const createPaymentReceiptImage = async (receiptData) => {
       return;
     }
 
+    if (line.type === "miniDivider") {
+      drawDivider(y);
+      y += lineHeight;
+      return;
+    }
+
     if (line.type === "center") {
       drawText(line.text, width / 2, y, {
         size: line.size || 20,
@@ -636,6 +706,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     additionalCharge,
     discount,
     totalAmountToPay,
+    nextDueDate,
     createdBy,
     notes,
     receiptConfig
@@ -651,6 +722,8 @@ const buildEscPosReceiptData = async (receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
+  const receiptNextDueDate = formatReceiptDate(nextDueDate);
+  const footerLines = getReceiptFooterLines(config.FooterNote, defaultReceiptPrintConfig.FooterNote);
   const logoBase64 = await createReceiptLogoBase64();
 
   const lines = [
@@ -676,6 +749,10 @@ const buildEscPosReceiptData = async (receiptData) => {
           2
         )
       : []),
+    receiptNextDueDate ? `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n` : "",
+    receiptNextDueDate
+      ? `\x1B\x45\x01${createReceiptLine("Next Due Date", receiptNextDueDate)}\n\x1B\x45\x00`
+      : "",
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Payment Mode", receiptPaymentMode)}\n`,
     config.ShowReference && receiptHeaderReference
@@ -710,7 +787,9 @@ const buildEscPosReceiptData = async (receiptData) => {
     `${createReceiptLine("Notes", notes || "-")}\n`,
     "\n",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.FooterNote || defaultReceiptPrintConfig.FooterNote, THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    ...footerLines.map(
+      (line) => `${fitReceiptText(line, THERMAL_RECEIPT_CHAR_WIDTH)}\n`
+    ),
     "\x1B\x64\x04",
     "\x1D\x56\x00"
   );
@@ -932,11 +1011,29 @@ const tryAutoPrintToXprinter = async (receiptData) => {
     await qz.websocket.connect();
   }
 
-  const printerName = await resolveReceiptPrinterName(
-    qz,
-    receiptData?.receiptConfig?.PreferredPrinterName || ""
-  );
-  const config = qz.configs.create(printerName);
+  const receiptConfig = {
+    ...defaultReceiptPrintConfig,
+    ...(receiptData?.receiptConfig || {})
+  };
+  let config;
+
+  if (isNetworkReceiptPrinter(receiptConfig)) {
+    const host = String(receiptConfig.NetworkPrinterHost || "").trim();
+    if (!host) {
+      throw new Error("Network printer IP/host is required.");
+    }
+
+    config = qz.configs.create({
+      host,
+      port: normalizeReceiptPrinterPort(receiptConfig.NetworkPrinterPort)
+    });
+  } else {
+    const printerName = await resolveReceiptPrinterName(
+      qz,
+      receiptConfig.PreferredPrinterName || ""
+    );
+    config = qz.configs.create(printerName);
+  }
   const data = await buildEscPosReceiptData(receiptData);
 
   await qz.print(config, data);
@@ -1049,7 +1146,7 @@ const addOneMonthToDate = (value, preferredDay) => {
   return new Date(originalYear, originalMonth + 1, safeDay, 12, 0, 0, 0);
 };
 
-const resolveBillingAnchorDay = (dueDateValue, preferredDay) => {
+const resolveBillingAnchorDay = (dueDateValue, preferredDay, resetToDueDateDay = false) => {
   const normalizedPreferredDay = Number(preferredDay) || null;
 
   if (!dueDateValue) {
@@ -1063,11 +1160,11 @@ const resolveBillingAnchorDay = (dueDateValue, preferredDay) => {
 
   const dueDay = parsedDueDate.getDate();
 
-  if (!normalizedPreferredDay) {
+  if (resetToDueDateDay || !normalizedPreferredDay) {
     return dueDay;
   }
 
-  return normalizedPreferredDay === dueDay ? normalizedPreferredDay : dueDay;
+  return Math.min(Math.max(normalizedPreferredDay, 1), 31);
 };
 
 const getClientInstallDate = (client) => {
@@ -1440,6 +1537,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     additionalCharge,
     discount,
     totalAmountToPay,
+    nextDueDate,
     createdBy,
     notes,
     receiptConfig
@@ -1467,6 +1565,13 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(receiptPaymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
+  const receiptNextDueDate = formatReceiptDate(nextDueDate);
+  const footerHtml = getReceiptFooterLines(
+    config.FooterNote,
+    defaultReceiptPrintConfig.FooterNote
+  )
+    .map((line) => `<div>${escapeHtml(line)}</div>`)
+    .join("");
   const receiptLogoUrl = `${window.location.origin}${RECEIPT_LOGO_SRC}`;
 
   receiptWindow.document.open();
@@ -1515,6 +1620,9 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         border-top: 1px dashed #000;
         margin: 8px 0;
       }
+      .divider.mini {
+        margin: 5px 0;
+      }
       .row {
         display: flex;
         justify-content: space-between;
@@ -1533,6 +1641,9 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
       }
       .total {
         font-size: 13px;
+        font-weight: 700;
+      }
+      .next-due {
         font-weight: 700;
       }
     </style>
@@ -1569,6 +1680,14 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
           ? `<div class="row"><span class="label">Subscription Cover</span><span class="value wrap">${escapeHtml(subscriptionCover || "-")}</span></div>`
           : ""
       }
+      ${
+        receiptNextDueDate ? `<div class="divider mini"></div>` : ""
+      }
+      ${
+        receiptNextDueDate
+          ? `<div class="row next-due"><span class="label">Next Due Date</span><span class="value">${escapeHtml(receiptNextDueDate)}</span></div>`
+          : ""
+      }
 
       <div class="divider"></div>
 
@@ -1596,7 +1715,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
 
       <div class="divider"></div>
 
-      <div class="center muted">${escapeHtml(config.FooterNote || defaultReceiptPrintConfig.FooterNote)}</div>
+      <div class="center muted">${footerHtml}</div>
     </div>
     <script>
       window.onload = function () {
@@ -1637,6 +1756,7 @@ const createReceiptPayloadFromHistoryRow = (
   amountPaid: Number(row?.TotalAmount || row?.Cash || 0),
   paymentBreakdown: getPaymentBreakdownLines(row),
   subscriptionCover: row?.Cover || row?.SubscriptionCover || "-",
+  nextDueDate: resolveReceiptHistoryNextDueDate(row, client),
   additionalCharge: Number(row?.AddCharge || 0),
   discount: Number(row?.Discount || 0),
   totalAmountToPay: Number(row?.TotalAmount || row?.Cash || 0),
@@ -1803,6 +1923,7 @@ function ClientList() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [dueDateFilter, setDueDateFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState("ACTIVE");
 
   const [menu, setMenu] = useState(null);
@@ -1921,9 +2042,7 @@ function ClientList() {
     MacAddress: client?.MacAddress || client?.macAddress || "",
     AmountDue: client?.AmountDue ?? "",
     DueDate: client?.DueDate ? formatDateToMMDDYYYY(client.DueDate) : "",
-    SubscriptionCover: client?.DueDate
-      ? String(new Date(client.DueDate).getDate())
-      : client?.SubscriptionCover || ""
+    SubscriptionCover: client?.SubscriptionCover || ""
   }), []);
 
   const navigateToClientList = useCallback(() => {
@@ -1933,10 +2052,11 @@ function ClientList() {
     return fetchClients({
       status: statusFilter,
       search: debouncedSearch,
+      dueDate: dueDateFilter ? dueDateFilter.format("YYYY-MM-DD") : "",
       page: page + 1,
       limit: rowsPerPage
     });
-  }, [fetchClients, statusFilter, debouncedSearch, page, rowsPerPage]);
+  }, [fetchClients, statusFilter, debouncedSearch, dueDateFilter, page, rowsPerPage]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1948,7 +2068,7 @@ function ClientList() {
 
   useEffect(() => {
     setPage(0);
-  }, [statusFilter, debouncedSearch]);
+  }, [statusFilter, debouncedSearch, dueDateFilter]);
 
   const selectedRepairTechnician = technicians.find(
     (user) => String(user.ID || "") === String(repairDialog.technicianId)
@@ -4365,7 +4485,8 @@ function ClientList() {
   const subscriptionStartDate = dueDateValue;
   const subscriptionAnchorDay = resolveBillingAnchorDay(
     dueDateValue,
-    selectedClient?.SubscriptionCover
+    selectedClient?.SubscriptionCover,
+    paymentRequiresReconnectFlow
   );
   const subscriptionEndDate = dueDateValue
       ? (() => {
@@ -4720,7 +4841,8 @@ function ClientList() {
         const billingAnchorDay =
           resolveBillingAnchorDay(
             selectedClient?.DueDate || paymentForm.PaymentDate,
-            selectedClient?.SubscriptionCover || paymentForm.SubscriptionCover
+            selectedClient?.SubscriptionCover || paymentForm.SubscriptionCover,
+            paymentRequiresReconnectFlow
           ) ||
           null;
         const nextDueDateDate =
@@ -4787,6 +4909,7 @@ function ClientList() {
         PromoPrice: 0,
         TransactionDate: transactionDateTime,
         DueDate: selectedClient.DueDate || null,
+        NextDueDate: nextDueDateIso,
         PaymentDate: paymentForm.PaymentDate,
         DcDate: null,
         Cover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
@@ -5401,7 +5524,9 @@ function ClientList() {
                 setNewClient((prev) => ({
                   ...prev,
                   DueDate: formatted,
-                  SubscriptionCover: String(value.date())
+                  SubscriptionCover: editMode
+                    ? prev.SubscriptionCover || String(value.date())
+                    : String(value.date())
                 }));
               }}
               slotProps={{
@@ -5596,21 +5721,63 @@ function ClientList() {
           backdropFilter: "blur(6px)"
         }}
       >
-        <TextField
-          label="Search"
-          fullWidth
-          value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems="stretch">
+          <TextField
+            label="Search"
+            fullWidth
+            value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+                backgroundColor: "#fff"
+              }
             }}
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              borderRadius: 2,
-              backgroundColor: "#fff"
-            }
-          }}
-        />
+          />
+
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <DatePicker
+              label="Due Date"
+              value={dueDateFilter}
+              onChange={(value) => {
+                setDueDateFilter(value);
+                setPage(0);
+              }}
+              slotProps={{
+                textField: {
+                  sx: {
+                    minWidth: { xs: "100%", md: 220 },
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2,
+                      backgroundColor: "#fff"
+                    }
+                  }
+                }
+              }}
+            />
+          </LocalizationProvider>
+
+          {dueDateFilter ? (
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setDueDateFilter(null);
+                setPage(0);
+              }}
+              sx={{
+                minWidth: { xs: "100%", md: 92 },
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 700
+              }}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </Stack>
       </Paper>
 
       <Box
@@ -6351,7 +6518,9 @@ function ClientList() {
                       setNewClient((prev) => ({
                         ...prev,
                         DueDate: formatted,
-                        SubscriptionCover: String(value.date())
+                        SubscriptionCover: editMode
+                          ? prev.SubscriptionCover || String(value.date())
+                          : String(value.date())
                       }));
                     }}
                     slotProps={{

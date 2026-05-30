@@ -3,9 +3,46 @@ import axios from "axios";
 import API from "../api/api";
 
 const AuthContext = createContext();
+const IDLE_LOGOUT_MS = 30 * 60 * 1000;
 const initialToken = sessionStorage.getItem("token");
 const initialUserRaw = sessionStorage.getItem("user");
 const initialUser = initialUserRaw ? JSON.parse(initialUserRaw) : null;
+
+const getTokenPayload = (value) => {
+  try {
+    const payload = String(value || "").split(".")[1];
+    if (!payload) {
+      return null;
+    }
+
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      "="
+    );
+
+    return JSON.parse(window.atob(paddedPayload));
+  } catch (error) {
+    return null;
+  }
+};
+
+const getTokenExpiryTime = (value) => {
+  const payload = getTokenPayload(value);
+  const expirySeconds = Number(payload?.exp || 0);
+
+  return expirySeconds > 0 ? expirySeconds * 1000 : 0;
+};
+
+const isTokenInvalidOrExpired = (value) => {
+  if (!getTokenPayload(value)) {
+    return true;
+  }
+
+  const expiryTime = getTokenExpiryTime(value);
+
+  return Boolean(expiryTime && Date.now() >= expiryTime);
+};
 
 if (initialToken) {
   axios.defaults.headers.common.Authorization = `Bearer ${initialToken}`;
@@ -50,6 +87,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const logoutWithMessage = (message = "") => {
+    if (message) {
+      sessionStorage.setItem("logoutMessage", message);
+    }
+
+    logout(true);
+  };
+
   const changePassword = async (currentPassword, newPassword) => {
     try {
       setLoading(true);
@@ -84,6 +129,88 @@ export const AuthProvider = ({ children }) => {
   }, [token, user]);
 
   useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    if (isTokenInvalidOrExpired(token)) {
+      logout(true);
+      return undefined;
+    }
+
+    const expiryTime = getTokenExpiryTime(token);
+    const timeoutMs = expiryTime ? Math.max(expiryTime - Date.now(), 0) : 0;
+
+    if (!timeoutMs) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      logout(true);
+    }, timeoutMs);
+
+    const handleSessionCheck = () => {
+      const currentToken = sessionStorage.getItem("token");
+
+      if (!currentToken || isTokenInvalidOrExpired(currentToken)) {
+        logout(true);
+      }
+    };
+
+    window.addEventListener("focus", handleSessionCheck);
+    document.addEventListener("visibilitychange", handleSessionCheck);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("focus", handleSessionCheck);
+      document.removeEventListener("visibilitychange", handleSessionCheck);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    let timeoutId = null;
+
+    const resetIdleTimer = () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      timeoutId = window.setTimeout(() => {
+        logout(true);
+      }, IDLE_LOGOUT_MS);
+    };
+
+    const activityEvents = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "click",
+      "scroll",
+      "touchstart",
+      "wheel"
+    ];
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true });
+    });
+    resetIdleTimer();
+
+    return () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, resetIdleTimer);
+      });
+    };
+  }, [token]);
+
+  useEffect(() => {
     const interceptorId = API.interceptors.response.use(
       (response) => response,
       (error) => {
@@ -92,7 +219,11 @@ export const AuthProvider = ({ children }) => {
         const isLoginRequest = requestUrl.includes("/auth/login");
 
         if (status === 401 && !isLoginRequest) {
-          logout(true);
+          const message =
+            error?.response?.data?.code === "SESSION_REPLACED"
+              ? "Your account was logged in from another device."
+              : "";
+          logoutWithMessage(message);
         }
 
         return Promise.reject(error);
@@ -113,6 +244,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       changePassword,
+      logoutWithMessage,
       hasRole: (...roles) =>
         roles
           .map((role) => String(role).toUpperCase())

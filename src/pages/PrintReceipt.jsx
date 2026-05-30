@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -20,6 +21,7 @@ import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName, normalizeCompanyName } fr
 const QZ_TRAY_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js";
 const RECEIPT_PRINTER_STORAGE_KEY = "isp_billing_receipt_printer_name";
 const RECEIPT_LOGO_SRC = "/dns_logo.png";
+const DEFAULT_FOOTER_NOTE = "Please keep this receipt as proof of payment.\nThank you for your payment.";
 let qzSecurityConfigured = false;
 
 const defaultForm = {
@@ -27,8 +29,11 @@ const defaultForm = {
   CompanyName: DEFAULT_COMPANY_NAME,
   ReceiptTitle: "Acknowledgement Receipt",
   ReceiptSubtitle: "",
-  FooterNote: "Thank you for your payment.",
+  FooterNote: DEFAULT_FOOTER_NOTE,
   PreferredPrinterName: "----------",
+  PrinterConnectionType: "USB",
+  NetworkPrinterHost: "",
+  NetworkPrinterPort: "9100",
   EnablePrinting: true,
   UseDirectPrint: true,
   ShowSubscriptionCover: true,
@@ -37,12 +42,26 @@ const defaultForm = {
   ShowCreatedBy: true
 };
 
+const isNetworkPrinter = (config = {}) =>
+  String(config.PrinterConnectionType || "").trim().toUpperCase() === "NETWORK";
+
+const normalizePrinterPort = (value) => {
+  const port = Number(String(value || "").trim());
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : 9100;
+};
+
 const fitReceiptText = (value, maxLength = 32) => {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   return normalized.length > maxLength
     ? normalized.slice(0, Math.max(maxLength - 3, 1)) + "..."
     : normalized;
 };
+
+const getReceiptFooterLines = (value, fallback = DEFAULT_FOOTER_NOTE) =>
+  String(value || fallback || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
 const formatReceiptAmount = (value) =>
   Number(value || 0).toLocaleString("en-PH", {
@@ -304,6 +323,7 @@ const resolveReceiptPrinterName = async (qz, preferredPrinterName = "") => {
 };
 
 const buildTestEscPosReceiptData = async (config) => {
+  const footerLines = getReceiptFooterLines(config.FooterNote);
   const paymentLines = [
     { method: "CASH", amount: 500, reference: "" },
     { method: "GCASH", amount: 1000, reference: "8039947123436" }
@@ -350,7 +370,9 @@ const buildTestEscPosReceiptData = async (config) => {
     config.ShowCreatedBy ? `${createReceiptLine("Received by", "admin")}\n` : "",
     "\n",
     "\x1B\x61\x01",
-    `${fitReceiptText(config.FooterNote || "Thank you for your payment.", THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
+    ...footerLines.map(
+      (line) => `${fitReceiptText(line, THERMAL_RECEIPT_CHAR_WIDTH)}\n`
+    ),
     "\x1B\x64\x04",
     "\x1D\x56\x00"
   );
@@ -412,8 +434,22 @@ const tryDirectTestPrint = async (config) => {
     await qz.websocket.connect();
   }
 
-  const printerName = await resolveReceiptPrinterName(qz, config.PreferredPrinterName);
-  const printerConfig = qz.configs.create(printerName);
+  let printerConfig;
+
+  if (isNetworkPrinter(config)) {
+    const host = String(config.NetworkPrinterHost || "").trim();
+    if (!host) {
+      throw new Error("Network printer IP/host is required.");
+    }
+
+    printerConfig = qz.configs.create({
+      host,
+      port: normalizePrinterPort(config.NetworkPrinterPort)
+    });
+  } else {
+    const printerName = await resolveReceiptPrinterName(qz, config.PreferredPrinterName);
+    printerConfig = qz.configs.create(printerName);
+  }
 
   await qz.print(printerConfig, await buildTestEscPosReceiptData(config));
 };
@@ -428,6 +464,10 @@ const openTestReceiptPrint = (config) => {
   if (!receiptWindow) {
     return;
   }
+
+  const footerHtml = getReceiptFooterLines(config.FooterNote)
+    .map((line) => `<div>${line}</div>`)
+    .join("");
 
   const paymentLines = [
     { method: "CASH", amount: 500, reference: "" },
@@ -534,7 +574,7 @@ const openTestReceiptPrint = (config) => {
           <div class="line"></div>
 
           ${config.ShowCreatedBy ? '<div class="section-note">Received By: admin</div>' : ""}
-          <div class="section-note">${config.FooterNote || "-"}</div>
+          <div class="section-note">${footerHtml || "-"}</div>
         </div>
         <script>
           window.onload = function () {
@@ -667,7 +707,59 @@ export default function PrintReceipt() {
                     }))
                   }
                   fullWidth
-                  helperText="Example: Xprinter, XP-58, XP-80"
+                  disabled={isNetworkPrinter(form)}
+                  helperText={
+                    isNetworkPrinter(form)
+                      ? "Network mode uses IP/host and port below."
+                      : "USB/local Windows printer name. Example: Xprinter, XP-58, XP-80"
+                  }
+                />
+              </Stack>
+
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                <TextField
+                  select
+                  label="Printer Connection"
+                  value={form.PrinterConnectionType || "USB"}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      PrinterConnectionType: event.target.value
+                    }))
+                  }
+                  fullWidth
+                  helperText="Choose USB/local printer or direct network printer."
+                >
+                  <MenuItem value="USB">USB / Local Printer</MenuItem>
+                  <MenuItem value="NETWORK">Network Printer</MenuItem>
+                </TextField>
+
+                <TextField
+                  label="Network Printer IP / Host"
+                  value={form.NetworkPrinterHost}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      NetworkPrinterHost: event.target.value
+                    }))
+                  }
+                  fullWidth
+                  disabled={!isNetworkPrinter(form)}
+                  helperText="Example: 192.168.1.50"
+                />
+
+                <TextField
+                  label="Network Port"
+                  value={form.NetworkPrinterPort}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      NetworkPrinterPort: event.target.value
+                    }))
+                  }
+                  fullWidth
+                  disabled={!isNetworkPrinter(form)}
+                  helperText="Usually 9100"
                 />
               </Stack>
 
@@ -869,7 +961,12 @@ export default function PrintReceipt() {
                   Subtitle: {form.ReceiptSubtitle || "-"}
                 </Typography>
                 <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
-                  Footer: {form.FooterNote || "-"}
+                  Footer:
+                  {getReceiptFooterLines(form.FooterNote).map((line) => (
+                    <Box component="span" display="block" key={line}>
+                      {line}
+                    </Box>
+                  ))}
                 </Typography>
                 <Typography sx={{ color: "#475569", lineHeight: 1.7 }}>
                   Printing: {form.EnablePrinting ? "Enabled" : "Disabled"}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -18,6 +18,16 @@ export default function Login() {
   const { login, loading } = useAuth();
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const message = sessionStorage.getItem("logoutMessage") || "";
+
+    if (message) {
+      setNotice(message);
+      sessionStorage.removeItem("logoutMessage");
+    }
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -25,10 +35,12 @@ export default function Login() {
 
     if (!result.success) {
       setError(result.error);
+      setNotice("");
       return;
     }
 
     setError("");
+    setNotice("");
     navigate("/", { replace: true });
   };
 
@@ -76,6 +88,7 @@ export default function Login() {
             </Stack>
 
             {error ? <Alert severity="error">{error}</Alert> : null}
+            {notice ? <Alert severity="warning">{notice}</Alert> : null}
 
             <TextField
               label="Username"
