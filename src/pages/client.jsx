@@ -446,7 +446,9 @@ const createPaymentReceiptImage = async (receiptData) => {
     String(receiptData?.salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, receiptData?.reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(receiptData?.planAmount);
-  const receiptNextDueDate = formatReceiptDate(receiptData?.nextDueDate);
+  const receiptNextDueDate = formatReceiptDate(
+    receiptData?.nextDueDate || receiptData?.NextDueDate
+  );
   const footerLines = getReceiptFooterLines(config.FooterNote, defaultReceiptPrintConfig.FooterNote);
   const receiptLogo = await loadReceiptLogoImage();
   const width = 640;
@@ -707,6 +709,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     discount,
     totalAmountToPay,
     nextDueDate,
+    NextDueDate,
     createdBy,
     notes,
     receiptConfig
@@ -722,7 +725,7 @@ const buildEscPosReceiptData = async (receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(paymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
-  const receiptNextDueDate = formatReceiptDate(nextDueDate);
+  const receiptNextDueDate = formatReceiptDate(nextDueDate || NextDueDate);
   const footerLines = getReceiptFooterLines(config.FooterNote, defaultReceiptPrintConfig.FooterNote);
   const logoBase64 = await createReceiptLogoBase64();
 
@@ -1538,6 +1541,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     discount,
     totalAmountToPay,
     nextDueDate,
+    NextDueDate,
     createdBy,
     notes,
     receiptConfig
@@ -1565,7 +1569,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
     String(salesInvoice || "").trim() ||
     getReceiptHeaderReference(receiptPaymentRows, reference || "");
   const receiptPlanAmount = formatReceiptPlanAmount(planAmount);
-  const receiptNextDueDate = formatReceiptDate(nextDueDate);
+  const receiptNextDueDate = formatReceiptDate(nextDueDate || NextDueDate);
   const footerHtml = getReceiptFooterLines(
     config.FooterNote,
     defaultReceiptPrintConfig.FooterNote
@@ -4515,11 +4519,14 @@ function ClientList() {
           })}`
         : "";
 
+  const calculatedNextDueDate = dueDateValue
+    ? addOneMonthToDate(dueDateValue, subscriptionAnchorDay)
+    : null;
+
   const nextDueDateDisplay = dueDateValue
     ? (() => {
-        const nextDueDate = addOneMonthToDate(dueDateValue, subscriptionAnchorDay);
-        return nextDueDate
-          ? new Date(nextDueDate).toLocaleDateString("en-PH", {
+        return calculatedNextDueDate
+          ? new Date(calculatedNextDueDate).toLocaleDateString("en-PH", {
               year: "numeric",
               month: "short",
               day: "numeric"
@@ -4846,6 +4853,7 @@ function ClientList() {
           ) ||
           null;
         const nextDueDateDate =
+          calculatedNextDueDate ||
           addOneMonthToDate(selectedClient.DueDate, billingAnchorDay) ||
           addOneMonthToDate(paymentForm.PaymentDate, billingAnchorDay) ||
           transactionDateTime;
@@ -5027,6 +5035,8 @@ function ClientList() {
         amountPaid,
         paymentBreakdown,
         subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "-",
+        nextDueDate: nextDueDateIso,
+        NextDueDate: nextDueDateIso,
         additionalCharge,
         discount,
         totalAmountToPay,
