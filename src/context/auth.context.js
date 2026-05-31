@@ -4,6 +4,7 @@ import API from "../api/api";
 
 const AuthContext = createContext();
 const IDLE_LOGOUT_MS = 30 * 60 * 1000;
+const SESSION_CHECK_MS = 30 * 1000;
 const initialToken = sessionStorage.getItem("token");
 const initialUserRaw = sessionStorage.getItem("user");
 const initialUser = initialUserRaw ? JSON.parse(initialUserRaw) : null;
@@ -164,6 +165,25 @@ export const AuthProvider = ({ children }) => {
       window.clearTimeout(timeoutId);
       window.removeEventListener("focus", handleSessionCheck);
       document.removeEventListener("visibilitychange", handleSessionCheck);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    const checkActiveSession = () => {
+      API.get("/auth/me").catch(() => {
+        // 401 responses are handled by the shared API interceptor below.
+      });
+    };
+
+    checkActiveSession();
+    const intervalId = window.setInterval(checkActiveSession, SESSION_CHECK_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
     };
   }, [token]);
 

@@ -494,8 +494,11 @@ const createPaymentReceiptImage = async (receiptData) => {
       type: "row",
       label: "Next Due Date",
       value: receiptNextDueDate,
+      size: 25,
+      valueSize: 25,
       color: "#d32f2f",
-      weight: 800
+      weight: 900,
+      valueWeight: 900
     });
   }
 
@@ -662,7 +665,7 @@ const createPaymentReceiptImage = async (receiptData) => {
 
     if (line.type === "miniDivider") {
       drawDivider(y);
-      y += lineHeight;
+      y += 32;
       return;
     }
 
@@ -754,7 +757,7 @@ const buildEscPosReceiptData = async (receiptData) => {
       : []),
     receiptNextDueDate ? `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n` : "",
     receiptNextDueDate
-      ? `\x1B\x45\x01${createReceiptLine("Next Due Date", receiptNextDueDate)}\n\x1B\x45\x00`
+      ? `\x1B\x45\x01\x1D\x21\x11${createReceiptLine("Next Due", receiptNextDueDate, 22)}\n\x1D\x21\x00\x1B\x45\x00`
       : "",
     `${"-".repeat(THERMAL_RECEIPT_CHAR_WIDTH)}\n`,
     `${createReceiptLine("Payment Mode", receiptPaymentMode)}\n`,
@@ -1625,7 +1628,7 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         margin: 8px 0;
       }
       .divider.mini {
-        margin: 5px 0;
+        margin: 6px 0 8px;
       }
       .row {
         display: flex;
@@ -1648,7 +1651,10 @@ const openPaymentReceiptPrint = (receiptWindow, receiptData) => {
         font-weight: 700;
       }
       .next-due {
-        font-weight: 700;
+        color: #d32f2f;
+        font-size: 16px;
+        font-weight: 900;
+        line-height: 1.25;
       }
     </style>
   </head>
