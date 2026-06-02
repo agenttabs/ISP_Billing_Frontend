@@ -103,6 +103,101 @@ const getDateOnlyTime = (value) => {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 };
 
+const getClientInstallDate = (client) => {
+  const candidates = [
+    client?.DateEntry,
+    client?.DateInstalled,
+    client?.InstallDate,
+    client?.createdAt
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const date = new Date(candidate);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
+};
+
+const getFirstBillableMonthStart = (client) => {
+  const installDate = getClientInstallDate(client);
+  if (!installDate) {
+    return null;
+  }
+
+  return new Date(
+    installDate.getFullYear(),
+    installDate.getMonth() + 1,
+    1,
+    0,
+    0,
+    0,
+    0
+  );
+};
+
+const getClientReconnectDate = (client) => {
+  const candidates = [
+    client?.LastReconnectedAt,
+    client?.ReconnectedAt,
+    client?.ReconnectDate
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const date = new Date(candidate);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
+};
+
+const shouldSkipPreviousDueAfterReconnect = (client, billingDueDate, previousDueDate) => {
+  const reconnectDate = getClientReconnectDate(client);
+  if (!reconnectDate || !billingDueDate || !previousDueDate) {
+    return false;
+  }
+
+  const reconnectMonthStart = new Date(
+    reconnectDate.getFullYear(),
+    reconnectDate.getMonth(),
+    1,
+    0,
+    0,
+    0,
+    0
+  );
+  const nextReconnectMonthStart = new Date(
+    reconnectDate.getFullYear(),
+    reconnectDate.getMonth() + 1,
+    1,
+    0,
+    0,
+    0,
+    0
+  );
+  const billingTime = getDateOnlyTime(billingDueDate);
+  const previousTime = getDateOnlyTime(previousDueDate);
+
+  return (
+    billingTime !== null &&
+    previousTime !== null &&
+    previousTime >= reconnectMonthStart.getTime() &&
+    billingTime >= nextReconnectMonthStart.getTime()
+  );
+};
+
 const getBillingDueDate = (client, billingPeriod, fallbackRange) => {
   const year = Number(billingPeriod?.year);
   const month = Number(billingPeriod?.month);
@@ -288,10 +383,19 @@ const getPaymentsForDueCycle = (history, billingDueDate) =>
       return right - left;
     });
 
-const getPreviousDueBalance = ({ history, billingDueDate, monthlyDue }) => {
+const getPreviousDueBalance = ({ client, history, billingDueDate, monthlyDue }) => {
   const previousDueDate = getPreviousBillingDueDate(billingDueDate);
 
   if (!previousDueDate) {
+    return 0;
+  }
+
+  const firstBillableMonthStart = getFirstBillableMonthStart(client);
+  if (firstBillableMonthStart && previousDueDate < firstBillableMonthStart) {
+    return 0;
+  }
+
+  if (shouldSkipPreviousDueAfterReconnect(client, billingDueDate, previousDueDate)) {
     return 0;
   }
 
@@ -346,7 +450,7 @@ export default function BillingStatementContent({
   const latestPayment = sortedPaymentHistory[0] || null;
   const monthlyDue = Number(client?.AmountDue || 0);
   const previousDueBalance = billingPeriod
-    ? getPreviousDueBalance({ history, billingDueDate, monthlyDue })
+    ? getPreviousDueBalance({ client, history, billingDueDate, monthlyDue })
     : 0;
   const previousBalance =
     Math.max(Number(client?.Balance || 0), 0) + previousDueBalance;

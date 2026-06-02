@@ -167,7 +167,7 @@ const dataUrlToBlob = async (dataUrl) => {
 };
 
 const getReceiptImageSource = (value) => {
-  const raw = String(value || "").trim();
+  const raw = String(value || "").trim().replace(/\\/g, "/");
   if (!raw) {
     return "";
   }
@@ -176,7 +176,31 @@ const getReceiptImageSource = (value) => {
     return raw;
   }
 
+  if (raw.startsWith("/api/uploads/")) {
+    return `${SOCKET_BASE_URL}${raw.replace(/^\/api/, "")}`;
+  }
+
+  if (raw.startsWith("/uploads/") || raw.startsWith("uploads/")) {
+    const uploadPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${SOCKET_BASE_URL}${uploadPath}`;
+  }
+
   return `data:image/jpeg;base64,${raw}`;
+};
+
+const resolveReceiptImagePreviewSource = async (value) => {
+  const source = getReceiptImageSource(value);
+
+  if (!source || !/^https?:\/\//i.test(source) || !source.includes("/uploads/")) {
+    return source;
+  }
+
+  const response = await fetch(source, { mode: "cors" });
+  if (!response.ok) {
+    throw new Error(`Receipt image request failed with ${response.status}.`);
+  }
+
+  return URL.createObjectURL(await response.blob());
 };
 
 const toSalesInvoiceNumber = (value) => {
@@ -3799,6 +3823,17 @@ function ClientList() {
     }
   };
 
+  const handleOpenReceiptImagePreview = async (value) => {
+    try {
+      const previewSource = await resolveReceiptImagePreviewSource(value);
+      setReceiptViewerSrc(previewSource);
+      setReceiptPreviewOpen(true);
+    } catch (error) {
+      console.error("RECEIPT IMAGE PREVIEW ERROR:", error);
+      showMessage("Receipt Image Error", "Unable to open the receipt image file.", "error");
+    }
+  };
+
   const loadTechnicians = async () => {
     try {
       const { data } = await API.get("/auth/technicians");
@@ -4927,6 +4962,9 @@ function ClientList() {
         PaymentDate: paymentForm.PaymentDate,
         DcDate: null,
         Cover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
+        IsReconnectPayment: Boolean(reconnectPlan),
+        ReconnectedAt: reconnectPlan ? transactionDateTime : null,
+        ReconnectDueDate: reconnectPlan ? nextDueDateIso : null,
         CreatedBy: createdByName || createdById,
         CreatedById: createdById,
         createdAt: transactionDateTime,
@@ -5023,6 +5061,8 @@ function ClientList() {
           PaymentStatus: balance <= 0 ? "PAID" : "PARTIAL",
           DueDate: nextDueDateIso,
           SubscriptionCover: nextSubscriptionCover,
+          LastReconnectedAt: reconnectPlan ? transactionDateTime.toISOString() : selectedClient.LastReconnectedAt,
+          LastReconnectDueDate: reconnectPlan ? nextDueDateIso : selectedClient.LastReconnectDueDate,
           Note: paymentNote
         }
       );
@@ -5540,9 +5580,7 @@ function ClientList() {
                 setNewClient((prev) => ({
                   ...prev,
                   DueDate: formatted,
-                  SubscriptionCover: editMode
-                    ? prev.SubscriptionCover || String(value.date())
-                    : String(value.date())
+                  SubscriptionCover: String(value.date())
                 }));
               }}
               slotProps={{
@@ -6534,9 +6572,7 @@ function ClientList() {
                       setNewClient((prev) => ({
                         ...prev,
                         DueDate: formatted,
-                        SubscriptionCover: editMode
-                          ? prev.SubscriptionCover || String(value.date())
-                          : String(value.date())
+                        SubscriptionCover: String(value.date())
                       }));
                     }}
                     slotProps={{
@@ -7378,10 +7414,7 @@ function ClientList() {
                             <Button
                               variant="text"
                               size="small"
-                              onClick={() => {
-                                setReceiptViewerSrc(getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl));
-                                setReceiptPreviewOpen(true);
-                              }}
+                              onClick={() => handleOpenReceiptImagePreview(entry.receiptImageDataUrl || entry.receiptImageUrl)}
                               sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
                             >
                               View
@@ -7773,10 +7806,7 @@ function ClientList() {
                             <Button
                               variant="text"
                               size="small"
-                              onClick={() => {
-                                setReceiptViewerSrc(getReceiptImageSource(entry.receiptImageDataUrl || entry.receiptImageUrl));
-                                setReceiptPreviewOpen(true);
-                              }}
+                              onClick={() => handleOpenReceiptImagePreview(entry.receiptImageDataUrl || entry.receiptImageUrl)}
                               sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
                             >
                               View
@@ -8373,10 +8403,7 @@ function ClientList() {
                                           <Button
                                             variant="text"
                                             size="small"
-                                            onClick={() => {
-                                              setReceiptViewerSrc(getReceiptImageSource(earningRow.ReceiptImage));
-                                              setReceiptPreviewOpen(true);
-                                            }}
+                                            onClick={() => handleOpenReceiptImagePreview(earningRow.ReceiptImage)}
                                             sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
                                           >
                                             View
