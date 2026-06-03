@@ -4143,11 +4143,6 @@ function ClientList() {
   };
 
   const handleUpdateClient = async () => {
-    if (!isAdminUser) {
-      showMessage("Update Not Allowed", "Only admin users can update clients.", "warning");
-      return;
-    }
-
     if (emailError) {
       showMessage("Invalid Email", "Please enter a valid email address.", "warning");
       return;
@@ -5676,22 +5671,20 @@ function ClientList() {
           {refreshModeSaving ? "Refreshing..." : "Refresh Mode"}
         </Button>
       ) : null}
-      {(!editMode || isAdminUser) ? (
-        <Button
-          variant="contained"
-          onClick={editMode ? handleUpdateClient : handleAddClient}
-          sx={{
-            px: 3.25,
-            py: 0.85,
-            borderRadius: 2,
-            textTransform: "none",
-            fontWeight: 700,
-            boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
-          }}
-        >
-          Save Client
-        </Button>
-      ) : null}
+      <Button
+        variant="contained"
+        onClick={editMode ? handleUpdateClient : handleAddClient}
+        sx={{
+          px: 3.25,
+          py: 0.85,
+          borderRadius: 2,
+          textTransform: "none",
+          fontWeight: 700,
+          boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
+        }}
+      >
+        Save Client
+      </Button>
     </Box>
   );
 
@@ -6653,22 +6646,20 @@ function ClientList() {
               Pull OUT
             </Button>
           ) : null}
-          {(!editMode || isAdminUser) ? (
-            <Button
-              variant="contained"
-              onClick={editMode ? handleUpdateClient : handleAddClient}
-              sx={{
-                px: 3.25,
-                py: 0.85,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 700,
-                boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
-              }}
-            >
-              Save Client
-            </Button>
-          ) : null}
+          <Button
+            variant="contained"
+            onClick={editMode ? handleUpdateClient : handleAddClient}
+            sx={{
+              px: 3.25,
+              py: 0.85,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 700,
+              boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
+            }}
+          >
+            Save Client
+          </Button>
         </DialogActions>
       </Dialog>
 
