@@ -4237,7 +4237,13 @@ function ClientList() {
     try {
       const todayText = dayjs().format("MM/DD/YYYY");
       const existingNote = String(newClient.Note || "").trim();
-      const pullOutNote = `Pull out ${todayText} by billing`;
+      const pullOutBy =
+        currentUser?.name ||
+        currentUser?.username ||
+        currentUser?.Name ||
+        currentUser?.Username ||
+        "billing";
+      const pullOutNote = `Pull out ${todayText} by ${pullOutBy}`;
       const isPppoePullOut = selectedAuthMode === "PPPOE";
 
       const payload = {
