@@ -2605,6 +2605,8 @@ function ClientList() {
 
   const activeCount = Number(clientMeta?.activeCount || 0);
   const disconnectedCount = Number(clientMeta?.disconnectedCount || 0);
+  const cashierSearchCountVisible = !isAdminUser && Boolean(debouncedSearch);
+  const cashierSearchCount = Number(clientMeta?.total || 0);
   const billingPeriodOptions = useMemo(
     () => buildBillingPeriodOptions(billingPeriodDialog.client, disconnectAfterDueDays),
     [billingPeriodDialog.client, disconnectAfterDueDays]
@@ -5838,6 +5840,19 @@ function ClientList() {
             </Button>
           ) : null}
         </Stack>
+        {cashierSearchCountVisible ? (
+          <Typography
+            sx={{
+              mt: 1,
+              px: 0.25,
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              color: "#475569"
+            }}
+          >
+            Search result: {cashierSearchCount}
+          </Typography>
+        ) : null}
       </Paper>
 
       <Box
