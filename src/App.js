@@ -21,6 +21,8 @@ import MikrotikConnection from "./pages/MikrotikConnection";
 import MikrotikDcBatch from "./pages/MikrotikDcBatch";
 import NapLocation from "./pages/NapLocation";
 import NetplanMaintenance from "./pages/NetplanMaintenance";
+import OltLookup from "./pages/OltLookup";
+import OltDumpScheduler from "./pages/OltDumpScheduler";
 import PrintReceipt from "./pages/PrintReceipt";
 import PullOutReport from "./pages/PullOutReport";
 import ReportExpensesAndEarnings from "./pages/ReportExpensesAndEarnings";
@@ -110,6 +112,8 @@ function App() {
             <Route path="/mikrotik-connections" element={<MikrotikConnection />} />
             <Route path="/mikrotik-checker" element={<MikrotikChecker />} />
             <Route path="/mikrotik-dc-batch" element={<MikrotikDcBatch />} />
+            <Route path="/olt-lookup" element={<OltLookup />} />
+            <Route path="/olt-dump-scheduler" element={<OltDumpScheduler />} />
             <Route path="/transaction-verification" element={<TransactionVerification />} />
             <Route path="/system-diagnostics" element={<SystemDiagnostics />} />
           </Route>

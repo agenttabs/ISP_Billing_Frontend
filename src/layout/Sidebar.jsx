@@ -234,6 +234,18 @@ export default function Sidebar() {
       path: "/mikrotik-dc-batch",
       icon: <ScheduleSendOutlined />,
       roles: ["ADMIN"]
+    },
+    {
+      text: "OLT Lookup",
+      path: "/olt-lookup",
+      icon: <SettingsInputAntennaOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "OLT Dump Scheduler",
+      path: "/olt-dump-scheduler",
+      icon: <SettingsInputAntennaOutlined />,
+      roles: ["ADMIN"]
     }
   ].filter((item) => item.roles.includes(userType));
 
@@ -556,7 +568,7 @@ export default function Sidebar() {
       {open ? (
         <>
           <ListItemText
-            primary="Mikrotik"
+            primary="Mikrotik & OLT"
             primaryTypographyProps={{
               fontWeight: 700,
               fontSize: "0.86rem",
@@ -747,7 +759,7 @@ export default function Sidebar() {
               {open ? (
                 mikrotikButton
               ) : (
-                <Tooltip title="Mikrotik" placement="right">
+                <Tooltip title="Mikrotik & OLT" placement="right">
                   {mikrotikButton}
                 </Tooltip>
               )}

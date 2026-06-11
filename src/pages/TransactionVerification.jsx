@@ -7,6 +7,10 @@ import {
   CardContent,
   Checkbox,
   Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Paper,
   Stack,
   Table,
@@ -21,7 +25,8 @@ import PublishedWithChangesOutlinedIcon from "@mui/icons-material/PublishedWithC
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import ReplayOutlinedIcon from "@mui/icons-material/ReplayOutlined";
-import API from "../api/api";
+import CloseIcon from "@mui/icons-material/Close";
+import API, { SOCKET_BASE_URL } from "../api/api";
 import PageHeader from "../layout/PageHeader";
 
 const normalizeReference = (value) =>
@@ -123,6 +128,43 @@ const formatDateTime = (value) => {
     hour: "numeric",
     minute: "2-digit"
   });
+};
+
+const getReceiptImageSource = (value) => {
+  const raw = String(value || "").trim().replace(/\\/g, "/");
+  if (!raw) {
+    return "";
+  }
+
+  if (raw.startsWith("data:") || raw.startsWith("blob:") || /^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  if (raw.startsWith("/api/uploads/")) {
+    return `${SOCKET_BASE_URL}${raw.replace(/^\/api/, "")}`;
+  }
+
+  if (raw.startsWith("/uploads/") || raw.startsWith("uploads/")) {
+    const uploadPath = raw.startsWith("/") ? raw : `/${raw}`;
+    return `${SOCKET_BASE_URL}${uploadPath}`;
+  }
+
+  return `data:image/jpeg;base64,${raw}`;
+};
+
+const resolveReceiptImagePreviewSource = async (value) => {
+  const source = getReceiptImageSource(value);
+
+  if (!source || !/^https?:\/\//i.test(source) || !source.includes("/uploads/")) {
+    return source;
+  }
+
+  const response = await fetch(source, { mode: "cors" });
+  if (!response.ok) {
+    throw new Error(`Receipt image request failed with ${response.status}.`);
+  }
+
+  return URL.createObjectURL(await response.blob());
 };
 
 const extractReferencesFromText = (text) => {
@@ -438,6 +480,10 @@ export default function TransactionVerification() {
   const [pdfPassword, setPdfPassword] = useState("");
   const [pdfSummary, setPdfSummary] = useState("");
   const [pdfReferences, setPdfReferences] = useState([]);
+  const [receiptPreview, setReceiptPreview] = useState({
+    open: false,
+    src: ""
+  });
   const [filterDate, setFilterDate] = useState(
     new Date().toISOString().split("T")[0]
   );
@@ -666,6 +712,32 @@ export default function TransactionVerification() {
     }
   };
 
+  const handleOpenReceiptPreview = async (receiptImage) => {
+    try {
+      const previewSource = await resolveReceiptImagePreviewSource(receiptImage);
+      setReceiptPreview({
+        open: true,
+        src: previewSource
+      });
+      setError("");
+    } catch (err) {
+      setError(err.message || "Unable to open the uploaded receipt image.");
+    }
+  };
+
+  const handleCloseReceiptPreview = () => {
+    setReceiptPreview((prev) => {
+      if (prev.src && prev.src.startsWith("blob:")) {
+        URL.revokeObjectURL(prev.src);
+      }
+
+      return {
+        open: false,
+        src: ""
+      };
+    });
+  };
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <PageHeader
@@ -873,6 +945,7 @@ export default function TransactionVerification() {
                 <TableCell>GCash Ref</TableCell>
                   <TableCell>Receiver Last 4</TableCell>
                   <TableCell>Transfer Date</TableCell>
+                <TableCell>Uploaded Image</TableCell>
                 <TableCell>Receipt No.</TableCell>
                 <TableCell>Transaction Date</TableCell>
                 <TableCell>Status</TableCell>
@@ -882,7 +955,7 @@ export default function TransactionVerification() {
             <TableBody>
               {!records.length ? (
                 <TableRow>
-                  <TableCell colSpan={12} align="center" sx={{ py: 4, color: "#64748b" }}>
+                  <TableCell colSpan={13} align="center" sx={{ py: 4, color: "#64748b" }}>
                     {loading ? "Loading records..." : "No pending non-cash transactions found."}
                   </TableCell>
                 </TableRow>
@@ -920,9 +993,23 @@ export default function TransactionVerification() {
                       <TableCell>{record.AccountName || record.AccountNumber || "-"}</TableCell>
                       <TableCell>{record.VerificationMethod || record.PaymentMethod || "-"}</TableCell>
                       <TableCell>{formatCurrency(record.VerificationAmount ?? record.TotalAmount)}</TableCell>
-                      <TableCell>{record.VerificationReference || record.MOPRef || record.MatchReference || "-"}</TableCell>
+                        <TableCell>{record.VerificationReference || record.MOPRef || record.MatchReference || "-"}</TableCell>
                         <TableCell>{record.VerificationReceiverLast4 || record.ReceiverLast4 || record.GCashReceiverLast4 || "-"}</TableCell>
                         <TableCell>{record.VerificationTransferDate || record.TransferDate || record.GCashTransferDate || "-"}</TableCell>
+                      <TableCell>
+                        {record.ReceiptImage ? (
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() => handleOpenReceiptPreview(record.ReceiptImage)}
+                            sx={{ textTransform: "none", fontWeight: 700, minWidth: 0, px: 0 }}
+                          >
+                            View
+                          </Button>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
                       <TableCell>{record.PaymentReceipt || record.Invoice || "-"}</TableCell>
                       <TableCell>{formatDateTime(record.TransactionDate )}</TableCell>
                       <TableCell>
@@ -947,8 +1034,54 @@ export default function TransactionVerification() {
           </Table>
         </Paper>
       </Stack>
+
+      <Dialog
+        open={receiptPreview.open}
+        onClose={handleCloseReceiptPreview}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden"
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            backgroundColor: "#0f172a",
+            color: "#fff",
+            fontSize: "1rem",
+            fontWeight: 700
+          }}
+        >
+          Uploaded Receipt Image
+          <IconButton onClick={handleCloseReceiptPreview} sx={{ color: "#fff" }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 2.5, backgroundColor: "#f8fafc" }}>
+          {receiptPreview.src ? (
+            <Box
+              component="img"
+              src={receiptPreview.src}
+              alt="Uploaded receipt preview"
+              sx={{
+                width: "100%",
+                maxHeight: "75vh",
+                objectFit: "contain",
+                borderRadius: 2,
+                backgroundColor: "#fff",
+                border: "1px solid #dbe4ee"
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }
-
-

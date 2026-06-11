@@ -74,6 +74,19 @@ const formatDateToMMDDYYYY = (value) => {
   return `${mm}/${dd}/${yyyy}`;
 };
 
+const formatOltFiberReadDisplay = (value) => {
+  const readings = String(value || "")
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (readings.length <= 1) {
+    return readings[0] || "-";
+  }
+
+  return readings.reverse().join(" / ");
+};
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1219,6 +1232,32 @@ const getClientInstallDate = (client) => {
   return new Date();
 };
 
+const formatClientInstallDateDisplay = (client) => {
+  const candidates = [
+    client?.DateEntry,
+    client?.DateInstalled,
+    client?.InstallDate,
+    client?.createdAt
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      });
+    }
+  }
+
+  return "N/A";
+};
+
 const getMonthKey = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
@@ -1799,103 +1838,6 @@ const createReceiptPayloadFromHistoryRow = (
   receiptConfig
 });
 
-const getCommentValue = (comment, key) => {
-  const match = String(comment || "").match(new RegExp(`${key}=([^;]+)`, "i"));
-  return match?.[1]?.trim() || "";
-};
-
-const getModemStatusLabel = ({ isIpoeClient, lease }) => {
-  if (!isIpoeClient) {
-    return "-";
-  }
-
-  if (!lease) {
-    return "NO MAC FOUND";
-  }
-
-  const leaseStatus = String(lease.status || "").trim().toUpperCase();
-  const modemPlanValue = getCommentValue(lease.comment, "PLAN").toUpperCase();
-  const hasComment = String(lease.comment || "").trim() !== "";
-
-  if (leaseStatus !== "BOUND") {
-    return "NOT ACTIVE";
-  }
-
-  if (!hasComment || modemPlanValue === "0M/0M") {
-    return "HOLD";
-  }
-
-  return "ACTIVE";
-};
-
-const resolveIpoeLeaseForClient = ({
-  client,
-  leases = [],
-  leaseByMacAddress = {},
-  leaseByAccountName = {}
-}) => {
-  if (!client) {
-    return null;
-  }
-
-  const normalizedAuthMode = String(
-    client.AuthenticationMode || client.authMode || ""
-  )
-    .trim()
-    .toUpperCase();
-
-  if (normalizedAuthMode !== "IPOE") {
-    return null;
-  }
-
-  const macKey = String(
-    client.MacAddress || client.macAddress || ""
-  )
-    .trim()
-    .toUpperCase();
-  const accountKey = String(client.AccountName || "")
-    .trim()
-    .toUpperCase();
-
-  const mappedLease =
-    leaseByMacAddress[macKey] || leaseByAccountName[accountKey] || null;
-
-  if (mappedLease) {
-    return mappedLease;
-  }
-
-  return (
-    leases.find((lease) => {
-      const leaseCommentName = getCommentValue(lease?.comment, "NAME")
-        .trim()
-        .toUpperCase();
-      return Boolean(accountKey) && leaseCommentName === accountKey;
-    }) || null
-  );
-};
-
-const formatTrafficBytes = (value) => {
-  const numericValue = Number(value || 0);
-
-  if (!numericValue) {
-    return "0 B";
-  }
-
-  if (numericValue >= 1024 ** 3) {
-    return `${(numericValue / 1024 ** 3).toFixed(2)} GB`;
-  }
-
-  if (numericValue >= 1024 ** 2) {
-    return `${(numericValue / 1024 ** 2).toFixed(2)} MB`;
-  }
-
-  if (numericValue >= 1024) {
-    return `${(numericValue / 1024).toFixed(2)} KB`;
-  }
-
-  return `${numericValue} B`;
-};
-
 const getStatusChipStyles = (status) => {
   const normalized = String(status || "").toUpperCase();
 
@@ -1991,7 +1933,6 @@ function ClientList() {
   const [newClient, setNewClient] = useState(getDefaultNewClientForm());
   const [dhcpLeaseOptions, setDhcpLeaseOptions] = useState([]);
   const [loadingDhcpLeases, setLoadingDhcpLeases] = useState(false);
-  const [dhcpLeaseComments, setDhcpLeaseComments] = useState([]);
   const [paymentForm, setPaymentForm] = useState({
     AmountPaid: "",
     PaymentDate: getTodayLocalDate(),
@@ -2061,6 +2002,7 @@ function ClientList() {
   const [mikrotikStatusLoading, setMikrotikStatusLoading] = useState(false);
   const [mikrotikStatusError, setMikrotikStatusError] = useState("");
   const [mikrotikStatusData, setMikrotikStatusData] = useState(null);
+  const [mikrotikStatusRefreshing, setMikrotikStatusRefreshing] = useState(false);
   const [deleteHistoryDialog, setDeleteHistoryDialog] = useState({
     open: false,
     row: null
@@ -2122,16 +2064,6 @@ function ClientList() {
     : "";
   const repairDetailsDisplayValue =
     repairDialog.smsMessage || repairDialog.repairText || repairSmsPreview;
-
-  const refreshDhcpLeaseComments = useCallback(async () => {
-    try {
-      const res = await API.get("/dhcp-leases-all");
-      setDhcpLeaseComments(res.data || []);
-    } catch (err) {
-      console.error("DHCP LEASE COMMENT FETCH ERROR:", err);
-      setDhcpLeaseComments([]);
-    }
-  }, []);
 
   const loadReceiptPrintConfig = async (companyNameOverride = systemCompanyName) => {
     try {
@@ -2284,7 +2216,6 @@ function ClientList() {
       }
 
       loadClients();
-      refreshDhcpLeaseComments();
     };
 
     socket.on("clients:changed", handleClientsChanged);
@@ -2293,7 +2224,7 @@ function ClientList() {
       socket.off("clients:changed", handleClientsChanged);
       socket.disconnect();
     };
-  }, [loadClients, refreshDhcpLeaseComments]);
+  }, [loadClients]);
 
   useEffect(() => {
     const refreshActiveClientView = () => {
@@ -2302,7 +2233,6 @@ function ClientList() {
       }
 
       loadClients();
-      refreshDhcpLeaseComments();
     };
 
     const handleVisibilityChange = () => {
@@ -2320,32 +2250,14 @@ function ClientList() {
       window.removeEventListener("pageshow", refreshActiveClientView);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadClients, refreshDhcpLeaseComments]);
+  }, [loadClients]);
 
   useEffect(() => {
       const selectedClientOverdueDays = getClientOverdueDays(selectedClient);
-      const selectedClientLease = resolveIpoeLeaseForClient({
-        client: selectedClient,
-        leases: dhcpLeaseComments,
-        leaseByMacAddress: modemLeaseByMacAddress,
-        leaseByAccountName: modemLeaseByAccountName
-      });
-      const selectedClientAuthMode = getNormalizedAuthMode(
-        paymentForm.ReconnectAuthMode || selectedClient?.AuthenticationMode
-      );
-      const paymentHasActiveIpoeLease =
-        selectedClientAuthMode === "IPOE" &&
-        getModemStatusLabel({
-          isIpoeClient: true,
-          lease: selectedClientLease
-        }) === "ACTIVE";
       const paymentNeedsReconnectFlow =
-        !paymentHasActiveIpoeLease &&
-        (
-          isDisconnectedPlan(selectedClient) ||
-          Boolean(paymentForm.ReconnectRequired) ||
-          selectedClientOverdueDays > disconnectAfterDueDays
-        );
+        isDisconnectedPlan(selectedClient) ||
+        Boolean(paymentForm.ReconnectRequired) ||
+        selectedClientOverdueDays > disconnectAfterDueDays;
       const paymentNeedsDhcp =
         openPaymentModal &&
         getNormalizedAuthMode(
@@ -2398,7 +2310,6 @@ function ClientList() {
     };
   }, [
     newClient.AuthenticationMode,
-    dhcpLeaseComments,
     isClientFormPage,
     openModal,
     openPaymentModal,
@@ -2533,43 +2444,6 @@ function ClientList() {
         .map((mac) => String(mac).trim().toUpperCase())
     )
   ];
-  const modemLeaseByAccountName = dhcpLeaseComments.reduce((acc, lease) => {
-    const accountName = getCommentValue(lease.comment, "NAME").toUpperCase();
-
-    if (accountName) {
-      acc[accountName] = lease;
-    }
-
-    return acc;
-  }, {});
-  const modemLeaseByMacAddress = dhcpLeaseComments.reduce((acc, lease) => {
-    const macAddress = String(
-      lease.macAddress || lease["mac-address"] || ""
-    ).trim().toUpperCase();
-
-    if (macAddress) {
-      acc[macAddress] = lease;
-    }
-
-    return acc;
-  }, {});
-  const modalAccountNameKey = String(newClient.AccountName || "").trim().toUpperCase();
-  const modalMacKey = String(newClient.MacAddress || "").trim().toUpperCase();
-  const modalLease =
-      modemLeaseByMacAddress[modalMacKey] ||
-      modemLeaseByAccountName[modalAccountNameKey] ||
-      null;
-  const modalIsIpoeClient = selectedAuthMode === "IPOE";
-  const modalModemStatus = getModemStatusLabel({
-    isIpoeClient: modalIsIpoeClient,
-    lease: modalLease
-  });
-  const modalLeaseMacAddress = String(
-    modalLease?.macAddress || modalLease?.["mac-address"] || ""
-  ).trim().toUpperCase();
-  const modalLeaseIpAddress = String(
-    modalLease?.address || modalLease?.["active-address"] || ""
-  ).trim();
   const clientMapLatitude = normalizeCoordinateInput(
     newClient.Latitude || selectedClient?.Latitude || ""
   );
@@ -2587,22 +2461,6 @@ function ClientList() {
   const clientMapOpenUrl = hasClientMapCoordinates
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${clientMapLatitude},${clientMapLongitude}`)}`
     : "";
-  const mikrotikStatusRxBytes = Number(mikrotikStatusData?.rxBytes || 0);
-  const mikrotikStatusTxBytes = Number(mikrotikStatusData?.txBytes || 0);
-  const mikrotikTrafficPeak = Math.max(
-    mikrotikStatusRxBytes,
-    mikrotikStatusTxBytes,
-    1
-  );
-  const mikrotikRxWidth = `${Math.max(
-    12,
-    Math.round((mikrotikStatusRxBytes / mikrotikTrafficPeak) * 100)
-  )}%`;
-  const mikrotikTxWidth = `${Math.max(
-    12,
-    Math.round((mikrotikStatusTxBytes / mikrotikTrafficPeak) * 100)
-  )}%`;
-
   const activeCount = Number(clientMeta?.activeCount || 0);
   const disconnectedCount = Number(clientMeta?.disconnectedCount || 0);
   const showClientTabCounts = isAdminUser || Boolean(debouncedSearch);
@@ -2743,6 +2601,65 @@ function ClientList() {
 
   const getDaysPastDisconnectionThreshold = (client, threshold = disconnectAfterDueDays) =>
     Math.max(0, getClientOverdueDays(client) - threshold);
+
+  const getDisconnectDaysDisplay = (client, paymentStatus) => {
+    if (!client?.DueDate) {
+      return {
+        label: "N/A",
+        backgroundColor: "#f1f5f9",
+        color: "#64748b"
+      };
+    }
+
+    if (isDisconnectedPlan(client)) {
+      return {
+        label: "Disconnected",
+        backgroundColor: "#fee2e2",
+        color: "#b91c1c"
+      };
+    }
+
+    const overdueDays = getClientOverdueDays(client);
+    if (!Number.isFinite(Number(overdueDays))) {
+      return {
+        label: "N/A",
+        backgroundColor: "#f1f5f9",
+        color: "#64748b"
+      };
+    }
+
+    if (overdueDays < 0) {
+      const daysUntilDue = Math.abs(overdueDays);
+      return {
+        label: `Due in ${daysUntilDue}d`,
+        backgroundColor: "#eff6ff",
+        color: "#1d4ed8"
+      };
+    }
+
+    const remainingDays = disconnectAfterDueDays - overdueDays;
+    if (remainingDays > 0) {
+      return {
+        label: `${remainingDays}d left`,
+        backgroundColor: "#fff7ed",
+        color: "#c2410c"
+      };
+    }
+
+    if (remainingDays === 0) {
+      return {
+        label: "Disconnect today",
+        backgroundColor: "#fee2e2",
+        color: "#b91c1c"
+      };
+    }
+
+    return {
+      label: `${Math.abs(remainingDays)}d late`,
+      backgroundColor: "#fee2e2",
+      color: "#b91c1c"
+    };
+  };
 
   const openPaymentModalForClient = async (client, options = {}) => {
     const paymentDate = getTodayLocalDate();
@@ -2889,36 +2806,86 @@ function ClientList() {
     setExpandedPaymentHistoryRowId("");
   };
 
-  const handleOpenMikrotikStatusModal = async (client) => {
-    if (!client?._id) {
+  const refreshMikrotikStatus = useCallback(async (clientId, options = {}) => {
+    if (!clientId) {
       return;
     }
 
-    try {
-      setSelectedClient(client);
-      setOpenMikrotikStatusModal(true);
-      setMikrotikStatusLoading(true);
-      setMikrotikStatusError("");
-      setMikrotikStatusData(null);
+    const silent = Boolean(options.silent);
 
-      const { data } = await API.get(`/clients/${client._id}/mikrotik-status`);
-      setMikrotikStatusData(data || null);
+    try {
+      if (silent) {
+        setMikrotikStatusRefreshing(true);
+      } else {
+        setMikrotikStatusLoading(true);
+      }
+      setMikrotikStatusError("");
+
+      const { data } = await API.get(`/clients/${clientId}/mikrotik-status`, {
+        params: {
+          includeOlt: silent ? "0" : "1",
+          _: Date.now()
+        }
+      });
+      setMikrotikStatusData((prev) => {
+        if (silent) {
+          if (!prev) {
+            return prev;
+          }
+
+          return {
+            ...data,
+            olt: prev.olt
+          };
+        }
+
+        return data || null;
+      });
     } catch (err) {
       console.error("MIKROTIK STATUS ERROR:", err.response?.data || err.message);
       setMikrotikStatusError(
         err.response?.data?.error || "Failed to load MikroTik client status."
       );
     } finally {
-      setMikrotikStatusLoading(false);
+      if (silent) {
+        setMikrotikStatusRefreshing(false);
+      } else {
+        setMikrotikStatusLoading(false);
+      }
     }
+  }, []);
+
+  const handleOpenMikrotikStatusModal = async (client) => {
+    if (!client?._id) {
+      return;
+    }
+
+    setSelectedClient(client);
+    setOpenMikrotikStatusModal(true);
+    setMikrotikStatusError("");
+    setMikrotikStatusData(null);
+    await refreshMikrotikStatus(client._id);
   };
 
   const handleCloseMikrotikStatusModal = () => {
     setOpenMikrotikStatusModal(false);
     setMikrotikStatusLoading(false);
+    setMikrotikStatusRefreshing(false);
     setMikrotikStatusError("");
     setMikrotikStatusData(null);
   };
+
+  useEffect(() => {
+    if (!openMikrotikStatusModal || !selectedClient?._id || !mikrotikStatusData) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      refreshMikrotikStatus(selectedClient._id, { silent: true });
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [mikrotikStatusData, openMikrotikStatusModal, refreshMikrotikStatus, selectedClient?._id]);
 
   const handleOpenDeleteHistoryDialog = (row) => {
     setDeleteHistoryDialog({
@@ -2993,6 +2960,29 @@ function ClientList() {
         SubscriptionCover: subscriptionCover
       });
 
+      let correctionSmsResult = null;
+      try {
+        const { data } = await API.post("/sms/send-payment-correction", {
+          client: {
+            ClientName: selectedClient.ClientName || selectedClient.AccountName || "",
+            AccountName: selectedClient.AccountName || "",
+            AccountNumber: selectedClient.AccountNumber || "",
+            ContactNumber: selectedClient.ContactNumber || "",
+            AmountDue: selectedClient.AmountDue || 0,
+            SubscriptionCover: subscriptionCover
+          },
+          dueDate: dueDateValue.toISOString(),
+          subscriptionCover
+        });
+        correctionSmsResult = data;
+      } catch (smsErr) {
+        console.error("PAYMENT CORRECTION SMS ERROR:", smsErr.response?.data || smsErr.message);
+        correctionSmsResult = {
+          sent: false,
+          reason: smsErr.response?.data?.error || "Payment correction SMS request failed."
+        };
+      }
+
       setSelectedClient((prev) =>
         prev
           ? {
@@ -3003,13 +2993,15 @@ function ClientList() {
           : prev
       );
 
-      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
+      await loadClients();
       handleCloseAdjustDueDateDialog();
       handleClosePaymentHistoryModal();
       showMessage(
-        "Delete Completed",
-        "Payment history was deleted and the client due date was updated successfully.",
-        "success"
+        correctionSmsResult?.sent ? "Delete Completed" : "Delete Completed, SMS Skipped",
+        correctionSmsResult?.sent
+          ? "Payment history was deleted, due date was updated, and correction SMS was sent."
+          : `Payment history was deleted and due date was updated. ${correctionSmsResult?.reason || "Correction SMS was skipped."}`,
+        correctionSmsResult?.sent ? "success" : "warning"
       );
     } catch (err) {
       console.error("ADJUST DUE DATE ERROR:", err.response?.data || err.message);
@@ -4130,7 +4122,7 @@ function ClientList() {
 
     try {
       await addClient(data);
-      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
+      await loadClients();
       handleCloseModal();
       setNewClient(getDefaultNewClientForm());
     } catch (err) {
@@ -4195,13 +4187,17 @@ function ClientList() {
             : normalizedMacAddress
       };
       delete payload.macAddress;
+      delete payload.DateEntry;
+      delete payload.DateInstalled;
+      delete payload.InstallDate;
+      delete payload.createdAt;
 
       await API.put(
         `/clients/${selectedClient._id}`,
         payload
       );
 
-      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
+      await loadClients();
       handleCloseModal();
       setEditMode(false);
       setNewClient(getDefaultNewClientForm());
@@ -4223,15 +4219,6 @@ function ClientList() {
 
     if (!["IPOE", "PPPOE"].includes(selectedAuthMode)) {
       showMessage("Pull Out Not Available", "Pull OUT is available for IPOE and PPPOE clients only.", "warning");
-      return;
-    }
-
-    if (selectedAuthMode === "IPOE" && !["HOLD", "NOT ACTIVE"].includes(modalModemStatus)) {
-      showMessage(
-        "Pull Out Not Allowed",
-        "Pull OUT is only allowed when the modem status is HOLD or NOT ACTIVE.",
-        "warning"
-      );
       return;
     }
 
@@ -4263,7 +4250,7 @@ function ClientList() {
         payload
       );
 
-      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
+      await loadClients();
       handleCloseModal();
       setEditMode(false);
       setNewClient(getDefaultNewClientForm());
@@ -4444,19 +4431,6 @@ function ClientList() {
   const paymentSelectedAuthMode = getNormalizedAuthMode(
     paymentForm.ReconnectAuthMode || selectedClient?.AuthenticationMode
   );
-  const paymentSelectedClientLease = resolveIpoeLeaseForClient({
-    client: selectedClient,
-    leases: dhcpLeaseComments,
-    leaseByMacAddress: modemLeaseByMacAddress,
-    leaseByAccountName: modemLeaseByAccountName
-  });
-  const paymentSelectedClientModemStatus = getModemStatusLabel({
-    isIpoeClient: paymentSelectedAuthMode === "IPOE",
-    lease: paymentSelectedClientLease
-  });
-  const paymentHasActiveIpoeLease =
-    paymentSelectedAuthMode === "IPOE" &&
-    paymentSelectedClientModemStatus === "ACTIVE";
   const paymentReconnectMacAddress = String(
     paymentForm.ReconnectMacAddress || selectedClient?.MacAddress || ""
   )
@@ -4480,12 +4454,9 @@ function ClientList() {
   ];
   const paymentOverdueDays = getClientOverdueDays(selectedClient);
   const paymentRequiresReconnectFlow =
-      !paymentHasActiveIpoeLease &&
-      (
-        isDisconnectedPlan(selectedClient) ||
-        Boolean(paymentForm.ReconnectRequired) ||
-        paymentOverdueDays > disconnectAfterDueDays
-      );
+      isDisconnectedPlan(selectedClient) ||
+      Boolean(paymentForm.ReconnectRequired) ||
+      paymentOverdueDays > disconnectAfterDueDays;
   const rawPlanAmount = Number(selectedClient?.AmountDue ?? 0);
   const planAmount = paymentRequiresReconnectFlow
     ? getPlanPrice(selectedReconnectPlan)
@@ -5074,7 +5045,7 @@ function ClientList() {
         }
       );
 
-      await Promise.allSettled([loadClients(), refreshDhcpLeaseComments()]);
+      await loadClients();
       const receiptPayload = {
         clientName: selectedClient.ClientName || "",
         accountName: selectedClient.AccountName || "",
@@ -5235,6 +5206,15 @@ function ClientList() {
             value={newClient.AccountName || ""}
             onChange={handleChange}
           />
+
+          {editMode ? (
+            <TextField
+              label="Installation Date"
+              fullWidth
+              value={formatClientInstallDateDisplay(newClient)}
+              InputProps={{ readOnly: true }}
+            />
+          ) : null}
         </Box>
 
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1, mt: 1.25 }}>
@@ -5319,59 +5299,6 @@ function ClientList() {
           </TextField>
         </Box>
 
-        <Box
-          sx={{
-            mt: 1.2,
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            flexWrap: "wrap"
-          }}
-        >
-          <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
-            Status Modem
-          </Typography>
-          <Chip
-            label={modalModemStatus}
-            size="small"
-            sx={{
-              borderRadius: "999px",
-              backgroundColor:
-                modalModemStatus === "ACTIVE"
-                  ? "#e8f5e9"
-                  : modalModemStatus === "HOLD"
-                    ? "#fff7ed"
-                    : modalModemStatus === "NOT ACTIVE"
-                      ? "#fee2e2"
-                      : modalModemStatus === "NO MAC FOUND"
-                        ? "#e5e7eb"
-                        : modalModemStatus === "DEACTIVE"
-                          ? "#fee2e2"
-                          : "#f1f5f9",
-              color:
-                modalModemStatus === "ACTIVE"
-                  ? "#2e7d32"
-                  : modalModemStatus === "HOLD"
-                    ? "#c2410c"
-                    : modalModemStatus === "NOT ACTIVE"
-                      ? "#b91c1c"
-                      : modalModemStatus === "NO MAC FOUND"
-                        ? "#374151"
-                        : modalModemStatus === "DEACTIVE"
-                          ? "#b91c1c"
-                          : "#475569",
-              fontWeight: 700,
-              px: 0.5
-            }}
-          />
-          {modalIsIpoeClient && (modalLeaseMacAddress || modalLeaseIpAddress) ? (
-            <Typography sx={{ fontSize: "10px", color: "#64748b" }}>
-              {modalLeaseMacAddress ? `MAC: ${modalLeaseMacAddress}` : ""}
-              {modalLeaseMacAddress && modalLeaseIpAddress ? " | " : ""}
-              {modalLeaseIpAddress ? `IP: ${modalLeaseIpAddress}` : ""}
-            </Typography>
-          ) : null}
-        </Box>
       </Paper>
 
       <Paper elevation={0} sx={formSectionSx}>
@@ -5935,7 +5862,7 @@ function ClientList() {
                 "Due Date",
                 "Amount",
                 "Payment Status",
-                "Status Modem",
+                "Disconnect Days",
                 "Actions"
               ].map((head) => (
                 <TableCell
@@ -5957,18 +5884,7 @@ function ClientList() {
             {clients.map((c) => {
               const displayedPaymentStatus = getDisplayedPaymentStatus(c);
               const isPaid = displayedPaymentStatus === "PAID";
-              const accountNameKey = String(c.AccountName || "").trim().toUpperCase();
-              const macKey = String(c.MacAddress || "").trim().toUpperCase();
-              const modemLease =
-                modemLeaseByMacAddress[macKey] ||
-                modemLeaseByAccountName[accountNameKey] ||
-                null;
-              const isIpoeClient =
-                String(c.AuthenticationMode || "").trim().toUpperCase() === "IPOE";
-              const modemStatus = getModemStatusLabel({
-                isIpoeClient,
-                lease: modemLease
-              });
+              const disconnectDaysDisplay = getDisconnectDaysDisplay(c, displayedPaymentStatus);
 
               return (
                 <TableRow
@@ -6027,34 +5943,12 @@ function ClientList() {
 
                   <TableCell>
                     <Chip
-                      label={modemStatus}
+                      label={disconnectDaysDisplay.label}
                       size="small"
                       sx={{
                         borderRadius: "999px",
-                        backgroundColor:
-                          modemStatus === "ACTIVE"
-                            ? "#e8f5e9"
-                            : modemStatus === "HOLD"
-                              ? "#fff7ed"
-                            : modemStatus === "NOT ACTIVE"
-                                ? "#fee2e2"
-                                : modemStatus === "NO MAC FOUND"
-                                  ? "#e5e7eb"
-                              : modemStatus === "DEACTIVE"
-                                ? "#fee2e2"
-                                : "#f1f5f9",
-                        color:
-                          modemStatus === "ACTIVE"
-                            ? "#2e7d32"
-                            : modemStatus === "HOLD"
-                              ? "#c2410c"
-                            : modemStatus === "NOT ACTIVE"
-                                ? "#b91c1c"
-                                : modemStatus === "NO MAC FOUND"
-                                  ? "#374151"
-                              : modemStatus === "DEACTIVE"
-                                ? "#b91c1c"
-                                : "#475569",
+                        backgroundColor: disconnectDaysDisplay.backgroundColor,
+                        color: disconnectDaysDisplay.color,
                         fontWeight: 700,
                         px: 0.5
                       }}
@@ -6064,7 +5958,7 @@ function ClientList() {
                   <TableCell align="center">
                     <Tooltip title="Update">
                       <IconButton
-                        sx={{ "&:hover": { color: "#1976d2" } }}
+                        sx={{ color: "#2563eb", "&:hover": { backgroundColor: "#eff6ff", color: "#1d4ed8" } }}
                         onClick={() => navigate(`/clients/${c._id}/edit`)}
                       >
                         <EditIcon />
@@ -6073,7 +5967,7 @@ function ClientList() {
 
                     <Tooltip title="Billing">
                       <IconButton
-                        sx={{ "&:hover": { color: "#0288d1" } }}
+                        sx={{ color: "#0891b2", "&:hover": { backgroundColor: "#ecfeff", color: "#0e7490" } }}
                         onClick={() => handleOpenBillingPeriodDialog(c)}
                       >
                         <ReceiptIcon />
@@ -6082,7 +5976,7 @@ function ClientList() {
 
                     <Tooltip title="Pay">
                       <IconButton
-                        sx={{ "&:hover": { color: "#2e7d32" } }}
+                        sx={{ color: "#16a34a", "&:hover": { backgroundColor: "#f0fdf4", color: "#15803d" } }}
                         onClick={() => handleOpenPaymentModal(c)}
                       >
                         <PaymentIcon />
@@ -6091,7 +5985,7 @@ function ClientList() {
 
                     <Tooltip title="Payment History">
                       <IconButton
-                        sx={{ "&:hover": { color: "#7c3aed" } }}
+                        sx={{ color: "#7c3aed", "&:hover": { backgroundColor: "#f5f3ff", color: "#6d28d9" } }}
                         onClick={() => handleOpenPaymentHistoryModal(c)}
                       >
                         <HistoryEduOutlinedIcon />
@@ -6100,7 +5994,7 @@ function ClientList() {
 
                     <Tooltip title="SMS">
                       <IconButton
-                        sx={{ "&:hover": { color: "#0f766e" } }}
+                        sx={{ color: "#0f766e", "&:hover": { backgroundColor: "#f0fdfa", color: "#0f766e" } }}
                         onClick={() => handleOpenSmsConfirmDialog(c)}
                       >
                         <SmsOutlinedIcon />
@@ -6109,7 +6003,7 @@ function ClientList() {
 
                     <Tooltip title="Repair">
                       <IconButton
-                        sx={{ "&:hover": { color: "#ea580c" } }}
+                        sx={{ color: "#ea580c", "&:hover": { backgroundColor: "#fff7ed", color: "#c2410c" } }}
                         onClick={() => handleOpenRepairDialog(c)}
                       >
                         <BuildCircleOutlinedIcon />
@@ -6118,7 +6012,7 @@ function ClientList() {
 
                     <Tooltip title="Router">
                       <IconButton
-                        sx={{ "&:hover": { color: "#6a1b9a" } }}
+                        sx={{ color: "#4f46e5", "&:hover": { backgroundColor: "#eef2ff", color: "#4338ca" } }}
                         onClick={() => handleOpenMikrotikStatusModal(c)}
                       >
                         <RouterIcon />
@@ -6227,6 +6121,15 @@ function ClientList() {
                   value={newClient.AccountName || ""}
                   onChange={handleChange}
                 />
+
+                {editMode ? (
+                  <TextField
+                    label="Installation Date"
+                    fullWidth
+                    value={formatClientInstallDateDisplay(newClient)}
+                    InputProps={{ readOnly: true }}
+                  />
+                ) : null}
               </Box>
 
               <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 1, mt: 1.25 }}>
@@ -6311,59 +6214,6 @@ function ClientList() {
                 </TextField>
               </Box>
 
-              <Box
-                sx={{
-                  mt: 1.2,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  flexWrap: "wrap"
-                }}
-              >
-                <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
-                  Status Modem
-                </Typography>
-                <Chip
-                  label={modalModemStatus}
-                  size="small"
-                  sx={{
-                    borderRadius: "999px",
-                    backgroundColor:
-                      modalModemStatus === "ACTIVE"
-                        ? "#e8f5e9"
-                        : modalModemStatus === "HOLD"
-                          ? "#fff7ed"
-                        : modalModemStatus === "NOT ACTIVE"
-                            ? "#fee2e2"
-                            : modalModemStatus === "NO MAC FOUND"
-                              ? "#e5e7eb"
-                          : modalModemStatus === "DEACTIVE"
-                            ? "#fee2e2"
-                            : "#f1f5f9",
-                    color:
-                      modalModemStatus === "ACTIVE"
-                        ? "#2e7d32"
-                        : modalModemStatus === "HOLD"
-                          ? "#c2410c"
-                        : modalModemStatus === "NOT ACTIVE"
-                            ? "#b91c1c"
-                            : modalModemStatus === "NO MAC FOUND"
-                              ? "#374151"
-                          : modalModemStatus === "DEACTIVE"
-                            ? "#b91c1c"
-                            : "#475569",
-                    fontWeight: 700,
-                    px: 0.5
-                  }}
-                />
-                {modalIsIpoeClient && (modalLeaseMacAddress || modalLeaseIpAddress) ? (
-                  <Typography sx={{ fontSize: "10px", color: "#64748b" }}>
-                    {modalLeaseMacAddress ? `MAC: ${modalLeaseMacAddress}` : ""}
-                    {modalLeaseMacAddress && modalLeaseIpAddress ? " | " : ""}
-                    {modalLeaseIpAddress ? `IP: ${modalLeaseIpAddress}` : ""}
-                  </Typography>
-                ) : null}
-              </Box>
             </Paper>
 
             <Paper elevation={0} sx={formSectionSx}>
@@ -6949,6 +6799,15 @@ function ClientList() {
 
                     <Paper elevation={0} sx={summaryCardSx}>
                       <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
+                        Installation Date
+                      </Typography>
+                      <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
+                        {formatClientInstallDateDisplay(selectedClient)}
+                      </Typography>
+                    </Paper>
+
+                    <Paper elevation={0} sx={summaryCardSx}>
+                      <Typography sx={{ fontSize: "0.54rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.2 }}>
                         Next Due Date
                       </Typography>
                       <Typography sx={{ mt: 0.12, fontSize: "0.76rem", fontWeight: 700, color: "#0f172a", lineHeight: 1.1 }}>
@@ -7273,6 +7132,282 @@ function ClientList() {
                       {ocrLoading ? "Scanning receipt image..." : ocrMessage}
                     </Typography>
                   )}
+                </Box>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2.25,
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff"
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                    mb: 2
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                      OLT Status
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.78rem", color: "#64748b" }}>
+                      Uses the client MAC address to check the OLT.
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => refreshMikrotikStatus(selectedClient?._id)}
+                    disabled={mikrotikStatusLoading || mikrotikStatusRefreshing || !selectedClient?._id}
+                    sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                  >
+                    Refresh OLT
+                  </Button>
+                </Box>
+
+                {mikrotikStatusData?.olt?.error ? (
+                  <Alert severity="warning" sx={{ mb: 1.5 }}>
+                    {mikrotikStatusData?.olt?.error}
+                  </Alert>
+                ) : null}
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+                    gap: 1.5
+                  }}
+                >
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt ? (mikrotikStatusData?.olt?.status || "NOT FOUND") : "CHECKING"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#e8f5e9"
+                            : "#fef3c7",
+                        color:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#2e7d32"
+                            : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER READ
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {formatOltFiberReadDisplay(mikrotikStatusData?.olt?.fiberRead)}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt ? (mikrotikStatusData?.olt?.fiberStatus || "NO DATA") : "CHECKING"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#e8f5e9"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#fee2e2"
+                              : "#fef3c7",
+                        color:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#2e7d32"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#b91c1c"
+                              : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT PORT
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.port || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT MAC
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.macAddress || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      AUTHINFO
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.authInfo || "-"}
+                    </Typography>
+                  </Paper>
+                </Box>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2.25,
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff"
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                    mb: 2
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                      OLT Status
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.78rem", color: "#64748b" }}>
+                      Live OLT telnet check runs when this window opens or when you refresh manually.
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => refreshMikrotikStatus(selectedClient?._id)}
+                    disabled={mikrotikStatusLoading || mikrotikStatusRefreshing || !selectedClient?._id}
+                    sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                  >
+                    Refresh OLT
+                  </Button>
+                </Box>
+
+                {mikrotikStatusData?.olt?.error ? (
+                  <Alert severity="warning" sx={{ mb: 1.5 }}>
+                    {mikrotikStatusData?.olt?.error}
+                  </Alert>
+                ) : null}
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+                    gap: 1.5
+                  }}
+                >
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt?.status || "NOT FOUND"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#e8f5e9"
+                            : "#fef3c7",
+                        color:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#2e7d32"
+                            : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER READ
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {formatOltFiberReadDisplay(mikrotikStatusData?.olt?.fiberRead)}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt?.fiberStatus || "NO DATA"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#e8f5e9"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#fee2e2"
+                              : "#fef3c7",
+                        color:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#2e7d32"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#b91c1c"
+                              : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT PORT
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.port || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT MAC
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.macAddress || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      AUTHINFO
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.authInfo || "-"}
+                    </Typography>
+                  </Paper>
                 </Box>
               </Paper>
 
@@ -8587,73 +8722,230 @@ function ClientList() {
                   backgroundColor: "#fff"
                 }}
               >
-                <Typography sx={{ fontWeight: 700, color: "#0f172a", mb: 2 }}>
-                  Traffic Monitor
-                </Typography>
-
-                {mikrotikStatusData.graphAvailable ? (
-                  <Box sx={{ display: "grid", gap: 2 }}>
-                    <Box>
-                      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.75 }}>
-                        <Typography sx={{ fontSize: "0.85rem", color: "#475569", fontWeight: 700 }}>
-                          RX
-                        </Typography>
-                        <Typography sx={{ fontSize: "0.85rem", color: "#0f172a", fontWeight: 700 }}>
-                          {formatTrafficBytes(mikrotikStatusRxBytes)}
-                        </Typography>
-                      </Box>
-                      <Box
-                        sx={{
-                          height: 14,
-                          borderRadius: 999,
-                          backgroundColor: "#e2e8f0",
-                          overflow: "hidden"
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: mikrotikRxWidth,
-                            height: "100%",
-                            borderRadius: 999,
-                            background: "linear-gradient(90deg, #2563eb, #38bdf8)"
-                          }}
-                        />
-                      </Box>
-                    </Box>
-
-                    <Box>
-                      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.75 }}>
-                        <Typography sx={{ fontSize: "0.85rem", color: "#475569", fontWeight: 700 }}>
-                          TX
-                        </Typography>
-                        <Typography sx={{ fontSize: "0.85rem", color: "#0f172a", fontWeight: 700 }}>
-                          {formatTrafficBytes(mikrotikStatusTxBytes)}
-                        </Typography>
-                      </Box>
-                      <Box
-                        sx={{
-                          height: 14,
-                          borderRadius: 999,
-                          backgroundColor: "#e2e8f0",
-                          overflow: "hidden"
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: mikrotikTxWidth,
-                            height: "100%",
-                            borderRadius: 999,
-                            background: "linear-gradient(90deg, #16a34a, #4ade80)"
-                          }}
-                        />
-                      </Box>
-                    </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                    mb: 2
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                      OLT Status
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.78rem", color: "#64748b" }}>
+                      Uses the MAC address to check GPON first, then EPON.
+                    </Typography>
                   </Box>
-                ) : (
-                  <Alert severity="info">
-                    Live RX/TX traffic is not available for this client type right now.
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => refreshMikrotikStatus(selectedClient?._id)}
+                    disabled={mikrotikStatusLoading || mikrotikStatusRefreshing || !selectedClient?._id}
+                    sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                  >
+                    Refresh OLT
+                  </Button>
+                </Box>
+
+                {mikrotikStatusData?.olt?.error ? (
+                  <Alert severity="warning" sx={{ mb: 1.5 }}>
+                    {mikrotikStatusData?.olt?.error}
                   </Alert>
-                )}
+                ) : null}
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+                    gap: 1.5
+                  }}
+                >
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt?.status || "NOT FOUND"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#e8f5e9"
+                            : "#fef3c7",
+                        color:
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("READY") ||
+                          String(mikrotikStatusData?.olt?.status || "").toUpperCase().includes("ONLINE")
+                            ? "#2e7d32"
+                            : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER READ
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {formatOltFiberReadDisplay(mikrotikStatusData?.olt?.fiberRead)}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      FIBER STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData?.olt?.fiberStatus || "NO DATA"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#e8f5e9"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#fee2e2"
+                              : "#fef3c7",
+                        color:
+                          mikrotikStatusData?.olt?.fiberStatus === "OK"
+                            ? "#2e7d32"
+                            : mikrotikStatusData?.olt?.fiberStatus === "CHECK FAILED"
+                              ? "#b91c1c"
+                              : "#92400e"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT PORT
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.port || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      OLT MAC
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.macAddress || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      SN
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.authInfo || "-"}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      TYPE
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData?.olt?.type || "-"}
+                    </Typography>
+                  </Paper>
+                </Box>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2.25,
+                  borderRadius: 3,
+                  border: "1px solid #dbe4ee",
+                  backgroundColor: "#fff"
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.5,
+                    mb: 2
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>
+                      Ping Test
+                    </Typography>
+                    <Typography sx={{ fontSize: "0.78rem", color: "#64748b" }}>
+                      Auto-refreshes every 5 seconds while this window is open.
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => refreshMikrotikStatus(selectedClient?._id, { silent: true })}
+                    disabled={mikrotikStatusLoading || mikrotikStatusRefreshing || !selectedClient?._id}
+                    sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                  >
+                    {mikrotikStatusLoading || mikrotikStatusRefreshing ? "Refreshing..." : "Refresh Ping"}
+                  </Button>
+                </Box>
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+                    gap: 1.5
+                  }}
+                >
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      STATUS
+                    </Typography>
+                    <Chip
+                      label={mikrotikStatusData.pingStatus || "NO IP"}
+                      size="small"
+                      sx={{
+                        width: "fit-content",
+                        fontWeight: 700,
+                        backgroundColor:
+                          mikrotikStatusData.pingStatus === "REACHABLE"
+                            ? "#e8f5e9"
+                            : "#fee2e2",
+                        color:
+                          mikrotikStatusData.pingStatus === "REACHABLE"
+                            ? "#2e7d32"
+                            : "#b91c1c"
+                      }}
+                    />
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      REPLIES
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {Number(mikrotikStatusData.pingReceived || 0)} / {Number(mikrotikStatusData.pingSent || 0)}
+                    </Typography>
+                  </Paper>
+
+                  <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2.5, border: "1px solid #e2e8f0" }}>
+                    <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "#64748b", mb: 0.75 }}>
+                      AVERAGE
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                      {mikrotikStatusData.pingAverageMs !== null && mikrotikStatusData.pingAverageMs !== undefined
+                        ? `${mikrotikStatusData.pingAverageMs} ms`
+                        : "-"}
+                    </Typography>
+                  </Paper>
+                </Box>
               </Paper>
             </Box>
           ) : (
