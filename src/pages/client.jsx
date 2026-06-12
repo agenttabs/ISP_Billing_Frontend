@@ -36,6 +36,7 @@ import BuildCircleOutlinedIcon from "@mui/icons-material/BuildCircleOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import AutorenewIcon from "@mui/icons-material/Autorenew";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -3647,7 +3648,11 @@ function ClientList() {
     </Dialog>
   );
 
-  const openClientActionConfirm = (action) => {
+  const openClientActionConfirm = (action, client = null) => {
+    if (client) {
+      setSelectedClient(client);
+    }
+
     if (action === "pullout") {
       setClientActionConfirm({
         open: true,
@@ -4271,7 +4276,8 @@ function ClientList() {
       return;
     }
 
-    if (selectedAuthMode !== "PPPOE") {
+    const clientAuthMode = String(selectedClient.AuthenticationMode || "").trim().toUpperCase();
+    if (clientAuthMode !== "PPPOE") {
       showMessage("Refresh Mode Not Available", "Refresh Mode is only available for PPPoE clients.", "warning");
       return;
     }
@@ -4284,6 +4290,7 @@ function ClientList() {
         data?.message || "The active PPPoE connection was refreshed.",
         "success"
       );
+      await loadClients();
     } catch (err) {
       console.error("REFRESH MODE ERROR:", err.response?.data || err.message);
       showMessage(
@@ -5588,23 +5595,6 @@ function ClientList() {
           Pull OUT
         </Button>
       ) : null}
-      {editMode && selectedAuthMode === "PPPOE" ? (
-        <Button
-          variant="outlined"
-          color="info"
-          disabled={refreshModeSaving}
-          onClick={() => openClientActionConfirm("refresh")}
-          sx={{
-            px: 2.5,
-            py: 0.8,
-            borderRadius: 2,
-            textTransform: "none",
-            fontWeight: 700
-          }}
-        >
-          {refreshModeSaving ? "Refreshing..." : "Refresh Mode"}
-        </Button>
-      ) : null}
       <Button
         variant="contained"
         onClick={editMode ? handleUpdateClient : handleAddClient}
@@ -6008,6 +5998,27 @@ function ClientList() {
                       >
                         <BuildCircleOutlinedIcon />
                       </IconButton>
+                    </Tooltip>
+
+                    <Tooltip
+                      title={
+                        String(c.AuthenticationMode || "").trim().toUpperCase() === "PPPOE"
+                          ? "Refresh Mode"
+                          : "Refresh Mode is only available for PPPoE"
+                      }
+                    >
+                      <span>
+                        <IconButton
+                          sx={{ color: "#0284c7", "&:hover": { backgroundColor: "#f0f9ff", color: "#0369a1" } }}
+                          onClick={() => openClientActionConfirm("refresh", c)}
+                          disabled={
+                            refreshModeSaving ||
+                            String(c.AuthenticationMode || "").trim().toUpperCase() !== "PPPOE"
+                          }
+                        >
+                          <AutorenewIcon />
+                        </IconButton>
+                      </span>
                     </Tooltip>
 
                     <Tooltip title="Router">
