@@ -239,7 +239,7 @@ export default function Sidebar() {
       text: "OLT Lookup",
       path: "/olt-lookup",
       icon: <SettingsInputAntennaOutlined />,
-      roles: ["ADMIN"]
+      roles: ["ADMIN", "CASHIER"]
     },
     {
       text: "OLT Dump Scheduler",

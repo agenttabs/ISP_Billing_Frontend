@@ -90,6 +90,7 @@ function App() {
             <Route path="/clients/:id/payment-history" element={<ClientPaymentHistory />} />
             <Route path="/reports/transactions" element={<ReportTransactions />} />
             <Route path="/expense-input" element={<ExpenseInput />} />
+            <Route path="/olt-lookup" element={<OltLookup />} />
           </Route>
 
           <Route element={<RoleRoute allowedRoles={["ADMIN"]} />}>
@@ -112,7 +113,6 @@ function App() {
             <Route path="/mikrotik-connections" element={<MikrotikConnection />} />
             <Route path="/mikrotik-checker" element={<MikrotikChecker />} />
             <Route path="/mikrotik-dc-batch" element={<MikrotikDcBatch />} />
-            <Route path="/olt-lookup" element={<OltLookup />} />
             <Route path="/olt-dump-scheduler" element={<OltDumpScheduler />} />
             <Route path="/transaction-verification" element={<TransactionVerification />} />
             <Route path="/system-diagnostics" element={<SystemDiagnostics />} />
