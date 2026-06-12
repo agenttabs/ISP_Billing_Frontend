@@ -3078,13 +3078,24 @@ function ClientList() {
       .filter(Boolean);
     const cleaned = raw.replace(/\r/g, " ").replace(/\n/g, " ");
 
+    const cleanOcrReference = (value) => {
+      const candidate = String(value || "").replace(/[^A-Z0-9]/gi, "").trim();
+
+      if (/^\d+$/.test(candidate) && candidate.length > 13 && candidate.startsWith("00")) {
+        const withoutOcrPrefix = candidate.replace(/^00+/, "");
+        if (withoutOcrPrefix.length >= 8) {
+          return withoutOcrPrefix;
+        }
+      }
+
+      return candidate;
+    };
+
     const traceIdMatch = cleaned.match(
       /\btrace\s*id\s*[:#-]?\s*([A-Z0-9\s-]{4,30})/i
     );
     if (traceIdMatch?.[1]) {
-      const traceCandidate = String(traceIdMatch[1])
-        .replace(/[^A-Z0-9]/gi, "")
-        .trim();
+      const traceCandidate = cleanOcrReference(traceIdMatch[1]);
       if (
         traceCandidate.length >= 4 &&
         /\d/.test(traceCandidate) &&
@@ -3099,9 +3110,7 @@ function ClientList() {
       /\breference\s*id\s*[:#-]?\s*([A-Z0-9\s-]{6,40})/i
     );
     if (referenceIdMatch?.[1]) {
-      const referenceIdCandidate = String(referenceIdMatch[1])
-        .replace(/[^A-Z0-9]/gi, "")
-        .trim();
+      const referenceIdCandidate = cleanOcrReference(referenceIdMatch[1]);
       if (
         referenceIdCandidate.length >= 6 &&
         /\d/.test(referenceIdCandidate) &&
@@ -3131,7 +3140,7 @@ function ClientList() {
       const digitGroups = chunkText.match(/\d[\d\s-]{5,30}/g) || [];
 
       for (const group of digitGroups) {
-        const candidate = group.replace(/[^\d]/g, "").trim();
+        const candidate = cleanOcrReference(group);
 
         if (
           candidate.length >= 6 &&
@@ -3142,7 +3151,7 @@ function ClientList() {
         }
       }
 
-      const compactCandidate = chunkText.replace(/[^A-Z0-9]/gi, "").trim();
+      const compactCandidate = cleanOcrReference(chunkText);
       if (
         compactCandidate.length >= 6 &&
         /\d/.test(compactCandidate) &&
@@ -3170,7 +3179,7 @@ function ClientList() {
           /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b.*$/i,
           ""
         );
-      const gcashReferenceCandidate = gcashReferenceChunk.replace(/[^\d]/g, "").trim();
+      const gcashReferenceCandidate = cleanOcrReference(gcashReferenceChunk);
 
       if (
         gcashReferenceCandidate.length >= 8 &&
@@ -3253,7 +3262,7 @@ function ClientList() {
       /\bref\s*no\.?\s*[:#-]?\s*((?:\d[\s-]?){6,20})(?=\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2}:\d{2}|$))/i
     );
     if (expressSendRefMatch?.[1]) {
-      const expressSendCandidate = expressSendRefMatch[1].replace(/[^\d]/g, "").trim();
+      const expressSendCandidate = cleanOcrReference(expressSendRefMatch[1]);
       if (
         expressSendCandidate.length >= 6 &&
         !looksLikePhoneReference(expressSendCandidate) &&
@@ -3265,7 +3274,7 @@ function ClientList() {
 
     const groupedDigitMatch = cleaned.match(/(?:\d[\s-]?){8,20}/g) || [];
     const groupedDigitReference = groupedDigitMatch
-      .map((value) => value.replace(/[^\d]/g, "").trim())
+      .map((value) => cleanOcrReference(value))
       .find(
         (value) =>
           value.length >= 8 &&
@@ -3280,7 +3289,7 @@ function ClientList() {
     const genericMatches = [
       ...cleaned.matchAll(/\b([A-Z0-9][A-Z0-9-]{5,24})\b/g)
     ]
-      .map((match) => String(match[1] || "").replace(/[^A-Z0-9]/gi, ""))
+      .map((match) => cleanOcrReference(match[1]))
       .filter(
         (value) =>
           /[A-Z]/i.test(value) &&
@@ -3433,6 +3442,20 @@ function ClientList() {
 
   const detectPaymentMethodFromText = (text) => {
     const normalized = text.toLowerCase();
+    const hasGcashClue =
+      /\bg\s*cash\b/i.test(text) ||
+      /g-?xchange/i.test(text) ||
+      /express\s*send/i.test(text) ||
+      /sent\s+via\s+g\s*cash/i.test(text) ||
+      (/\bref\s*no\.?\b/i.test(text) &&
+        (/(?:\+?63\s*9|09)[\d\s*?.-]{4,24}\d{4}/i.test(text) ||
+          /total\s*amount\s*sent/i.test(text))) ||
+      /total\s*amount\s*sent/i.test(text) ||
+      /sent\s+via\s+gcash/i.test(text);
+
+    if (hasGcashClue) {
+      return "GCASH";
+    }
 
     if (
       /\bref\s*no\.?\b/i.test(text) &&

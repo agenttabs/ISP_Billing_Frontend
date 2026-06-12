@@ -40,7 +40,7 @@ export default function Sidebar({ open }) {
           transition: "0.3s"
         }}
       >
-        ISP SYSTEM
+        DNS NETWORK
       </Box>
 
       <Divider />
