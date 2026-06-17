@@ -182,6 +182,12 @@ export default function Sidebar() {
       roles: ["ADMIN", "CASHIER"]
     },
     {
+      text: "Installation",
+      path: "/installation",
+      icon: <BuildCircleOutlined />,
+      roles: ["ADMIN", "CASHIER", "TECHNICIAN"]
+    },
+    {
       text: "Verification",
       path: "/transaction-verification",
       icon: <FactCheckOutlined />,

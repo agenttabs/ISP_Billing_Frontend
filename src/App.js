@@ -15,6 +15,7 @@ import ClientList from "./pages/client";
 import Dashboard from "./pages/DashboardPage";
 import EmailNotification from "./pages/EmailNotification";
 import ExpenseInput from "./pages/ExpenseInput";
+import Installation from "./pages/Installation";
 import Login from "./pages/Login";
 import MikrotikChecker from "./pages/MikrotikChecker";
 import MikrotikConnection from "./pages/MikrotikConnection";
@@ -123,6 +124,7 @@ function App() {
             <Route path="/nap" element={<NapLocation />} />
             <Route path="/reports/tech-report" element={<TechReport />} />
             <Route path="/repair-information" element={<RepairInformation />} />
+            <Route path="/installation" element={<Installation />} />
           </Route>
         </Route>
 
