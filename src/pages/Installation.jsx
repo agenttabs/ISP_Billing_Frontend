@@ -6,6 +6,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Table,
@@ -23,7 +27,9 @@ import {
 import CancelOutlined from "@mui/icons-material/CancelOutlined";
 import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
 import EditOutlined from "@mui/icons-material/EditOutlined";
+import EventRepeatOutlined from "@mui/icons-material/EventRepeatOutlined";
 import PendingActionsOutlined from "@mui/icons-material/PendingActionsOutlined";
+import PlayCircleOutline from "@mui/icons-material/PlayCircleOutline";
 import API from "../api/api";
 import { useAuth } from "../context/auth.context";
 import PageHeader from "../layout/PageHeader";
@@ -66,6 +72,8 @@ export default function Installation() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [rescheduleRow, setRescheduleRow] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
 
   const loadRows = async () => {
     try {
@@ -93,6 +101,7 @@ export default function Installation() {
   const counts = useMemo(
     () => ({
       pending: rows.filter((row) => String(row.Status || "").toUpperCase() === "PENDING").length,
+      ongoing: rows.filter((row) => String(row.Status || "").toUpperCase() === "ONGOING").length,
       done: rows.filter((row) => String(row.Status || "").toUpperCase() === "DONE").length,
       cancel: rows.filter((row) => String(row.Status || "").toUpperCase() === "CANCEL").length
     }),
@@ -129,6 +138,11 @@ export default function Installation() {
       OriginalStatus: row.Status || "PENDING",
       Note: row.Note || ""
     });
+  };
+
+  const openReschedule = (row) => {
+    setRescheduleRow(row);
+    setRescheduleDate(toDateInput(row.InstallationDate));
   };
 
   const saveInstallation = async () => {
@@ -173,9 +187,53 @@ export default function Installation() {
     }
   };
 
+  const saveReschedule = async () => {
+    if (!rescheduleRow || !rescheduleDate) return;
+
+    try {
+      setSaving(true);
+      await API.put(`/installations/${rescheduleRow._id}`, {
+        ...rescheduleRow,
+        InstallationDate: new Date(rescheduleDate).toISOString()
+      });
+      setSuccess("Installation date rescheduled.");
+      setError("");
+      setRescheduleRow(null);
+      setRescheduleDate("");
+      await loadRows();
+    } catch (err) {
+      setSuccess("");
+      setError(err.response?.data?.error || "Failed to reschedule installation date.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const canSetPending = (row) => {
     const currentStatus = String(row.Status || "").toUpperCase();
+    if (currentStatus === "ONGOING") return false;
     return userType === "ADMIN" || !["DONE", "CANCEL"].includes(currentStatus);
+  };
+
+  const canChangeFromOngoing = (row, nextStatus) => {
+    const currentStatus = String(row.Status || "").toUpperCase();
+    return currentStatus !== "ONGOING" || ["DONE", "CANCEL"].includes(nextStatus);
+  };
+
+  const getStatusLabel = (status) => {
+    const value = String(status || "PENDING").toUpperCase();
+    if (value === "DONE") return "Done";
+    if (value === "CANCEL") return "Cancel";
+    if (value === "ONGOING") return "Ongoing";
+    return "Pending";
+  };
+
+  const getStatusColor = (status) => {
+    const value = String(status || "PENDING").toUpperCase();
+    if (value === "DONE") return "success";
+    if (value === "CANCEL") return "error";
+    if (value === "ONGOING") return "info";
+    return "warning";
   };
 
   const formatStatusChangedBy = (row) => {
@@ -191,7 +249,7 @@ export default function Installation() {
       <Stack spacing={3}>
         <PageHeader
           title="Installation"
-          subtitle="Create independent installation records, set installation and transfer dates, and track Pending, Done, or Cancel status."
+          subtitle="Create independent installation records, set installation and transfer dates, and track Pending, Ongoing, Done, or Cancel status."
         />
 
         {error ? <Alert severity="error">{error}</Alert> : null}
@@ -223,11 +281,18 @@ export default function Installation() {
                   value="PENDING"
                   disabled={
                     form._id &&
-                    userType !== "ADMIN" &&
-                    ["DONE", "CANCEL"].includes(String(form.OriginalStatus || "").toUpperCase())
+                    (String(form.OriginalStatus || "").toUpperCase() === "ONGOING" ||
+                      (userType !== "ADMIN" &&
+                        ["DONE", "CANCEL"].includes(String(form.OriginalStatus || "").toUpperCase())))
                   }
                 >
                   Pending
+                </MenuItem>
+                <MenuItem
+                  value="ONGOING"
+                  disabled={form._id && String(form.OriginalStatus || "").toUpperCase() === "ONGOING"}
+                >
+                  Ongoing
                 </MenuItem>
                 <MenuItem value="DONE">Done</MenuItem>
                 <MenuItem value="CANCEL">Cancel</MenuItem>
@@ -285,6 +350,7 @@ export default function Installation() {
               sx={{ mb: 2, borderBottom: "1px solid #dbe4f0" }}
             >
               <Tab value="PENDING" label={`Pending (${counts.pending})`} />
+              <Tab value="ONGOING" label={`Ongoing (${counts.ongoing})`} />
               <Tab value="CANCEL" label={`Cancel (${counts.cancel})`} />
               <Tab value="DONE" label={`Done (${counts.done})`} />
             </Tabs>
@@ -316,20 +382,8 @@ export default function Installation() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={
-                            String(row.Status || "PENDING").toUpperCase() === "DONE"
-                              ? "Done"
-                              : String(row.Status || "PENDING").toUpperCase() === "CANCEL"
-                                ? "Cancel"
-                                : "Pending"
-                          }
-                          color={
-                            String(row.Status || "").toUpperCase() === "DONE"
-                              ? "success"
-                              : String(row.Status || "").toUpperCase() === "CANCEL"
-                                ? "error"
-                                : "warning"
-                          }
+                          label={getStatusLabel(row.Status)}
+                          color={getStatusColor(row.Status)}
                           variant="outlined"
                         />
                       </TableCell>
@@ -342,11 +396,19 @@ export default function Installation() {
                       <TableCell>{row.Note || "-"}</TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Edit">
-                            <IconButton size="small" color="primary" onClick={() => editRow(row)}>
-                              <EditOutlined fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {userType === "TECHNICIAN" ? (
+                            <Tooltip title="Resched">
+                              <IconButton size="small" color="primary" onClick={() => openReschedule(row)}>
+                                <EventRepeatOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="Edit">
+                              <IconButton size="small" color="primary" onClick={() => editRow(row)}>
+                                <EditOutlined fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Set Pending">
                             <IconButton
                               size="small"
@@ -357,11 +419,25 @@ export default function Installation() {
                               <PendingActionsOutlined fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          <Tooltip title="Set Ongoing">
+                            <IconButton
+                              size="small"
+                              color="info"
+                              disabled={
+                                saving ||
+                                String(row.Status || "").toUpperCase() === "ONGOING" ||
+                                !canChangeFromOngoing(row, "ONGOING")
+                              }
+                              onClick={() => changeStatus(row, "ONGOING")}
+                            >
+                              <PlayCircleOutline fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Set Done">
                             <IconButton
                               size="small"
                               color="success"
-                              disabled={saving || String(row.Status || "").toUpperCase() === "DONE"}
+                              disabled={saving || String(row.Status || "").toUpperCase() === "DONE" || !canChangeFromOngoing(row, "DONE")}
                               onClick={() => changeStatus(row, "DONE")}
                             >
                               <CheckCircleOutline fontSize="small" />
@@ -371,7 +447,7 @@ export default function Installation() {
                             <IconButton
                               size="small"
                               color="error"
-                              disabled={saving || String(row.Status || "").toUpperCase() === "CANCEL"}
+                              disabled={saving || String(row.Status || "").toUpperCase() === "CANCEL" || !canChangeFromOngoing(row, "CANCEL")}
                               onClick={() => changeStatus(row, "CANCEL")}
                             >
                               <CancelOutlined fontSize="small" />
@@ -387,6 +463,33 @@ export default function Installation() {
           </CardContent>
         </Card>
       </Stack>
+
+      <Dialog open={Boolean(rescheduleRow)} onClose={() => setRescheduleRow(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Resched Installation</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography sx={{ fontWeight: 700 }}>
+              {rescheduleRow?.CustomerName || "-"}
+            </Typography>
+            <TextField
+              label="Installation Date"
+              type="date"
+              value={rescheduleDate}
+              onChange={(event) => setRescheduleDate(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRescheduleRow(null)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveReschedule} disabled={saving || !rescheduleDate}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
