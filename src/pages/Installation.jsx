@@ -25,6 +25,7 @@ import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import PendingActionsOutlined from "@mui/icons-material/PendingActionsOutlined";
 import API from "../api/api";
+import { useAuth } from "../context/auth.context";
 import PageHeader from "../layout/PageHeader";
 
 const emptyForm = {
@@ -36,6 +37,7 @@ const emptyForm = {
   InstallationDate: "",
   TransferDate: "",
   Status: "PENDING",
+  OriginalStatus: "",
   Note: ""
 };
 
@@ -54,6 +56,8 @@ const toDateInput = (value) => {
 };
 
 export default function Installation() {
+  const { user } = useAuth();
+  const userType = String(user?.type || "").toUpperCase();
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState("");
@@ -122,6 +126,7 @@ export default function Installation() {
       InstallationDate: toDateInput(row.InstallationDate),
       TransferDate: toDateInput(row.TransferDate),
       Status: row.Status || "PENDING",
+      OriginalStatus: row.Status || "PENDING",
       Note: row.Note || ""
     });
   };
@@ -168,6 +173,19 @@ export default function Installation() {
     }
   };
 
+  const canSetPending = (row) => {
+    const currentStatus = String(row.Status || "").toUpperCase();
+    return userType === "ADMIN" || !["DONE", "CANCEL"].includes(currentStatus);
+  };
+
+  const formatStatusChangedBy = (row) => {
+    const statusUser = row.StatusChangedBy || {};
+    const name = statusUser.Name || statusUser.name || "";
+    const username = statusUser.Username || statusUser.username || "";
+    const displayName = name || username;
+    return displayName || "-";
+  };
+
   return (
     <Box>
       <Stack spacing={3}>
@@ -201,7 +219,16 @@ export default function Installation() {
                 <MenuItem value="Plan 2500">Plan 2500</MenuItem>
               </TextField>
               <TextField select label="Status" name="Status" value={form.Status} onChange={handleChange}>
-                <MenuItem value="PENDING">Pending</MenuItem>
+                <MenuItem
+                  value="PENDING"
+                  disabled={
+                    form._id &&
+                    userType !== "ADMIN" &&
+                    ["DONE", "CANCEL"].includes(String(form.OriginalStatus || "").toUpperCase())
+                  }
+                >
+                  Pending
+                </MenuItem>
                 <MenuItem value="DONE">Done</MenuItem>
                 <MenuItem value="CANCEL">Cancel</MenuItem>
               </TextField>
@@ -271,6 +298,7 @@ export default function Installation() {
                   <TableCell sx={{ fontWeight: 800 }}>Plan</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Installation Date</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Transfer Date</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>Status Changed By</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Note</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Action</TableCell>
                 </TableRow>
@@ -278,7 +306,7 @@ export default function Installation() {
               <TableBody>
                 {displayedRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={9} align="center">
                       No installation records found.
                     </TableCell>
                   </TableRow>
@@ -310,6 +338,7 @@ export default function Installation() {
                       <TableCell>{row.Plan || "-"}</TableCell>
                       <TableCell>{formatDate(row.InstallationDate)}</TableCell>
                       <TableCell>{formatDate(row.TransferDate)}</TableCell>
+                      <TableCell>{formatStatusChangedBy(row)}</TableCell>
                       <TableCell>{row.Note || "-"}</TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5}>
@@ -322,7 +351,7 @@ export default function Installation() {
                             <IconButton
                               size="small"
                               color="warning"
-                              disabled={saving || String(row.Status || "").toUpperCase() === "PENDING"}
+                              disabled={saving || String(row.Status || "").toUpperCase() === "PENDING" || !canSetPending(row)}
                               onClick={() => changeStatus(row, "PENDING")}
                             >
                               <PendingActionsOutlined fontSize="small" />

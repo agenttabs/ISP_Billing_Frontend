@@ -66,6 +66,13 @@ function PublicOnlyRoute({ children }) {
   return isAuthenticated ? <Navigate to="/" replace /> : children;
 }
 
+function HomeRoute() {
+  const { user } = useAuth();
+  const userType = String(user?.type || "").toUpperCase();
+
+  return userType === "TECHNICIAN" ? <div /> : <Dashboard />;
+}
+
 function App() {
   return (
     <Router>
@@ -80,7 +87,7 @@ function App() {
         />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<HomeRoute />} />
 
           <Route element={<RoleRoute allowedRoles={["ADMIN", "CASHIER"]} />}>
             <Route path="/clients" element={<ClientList />} />
