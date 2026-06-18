@@ -19,6 +19,8 @@ import {
   DialogContent,
   DialogActions,
   Alert,
+  Card,
+  CardContent,
   Switch,
   Tabs,
   Tab,
@@ -1922,6 +1924,7 @@ function ClientList() {
   const [repairDialog, setRepairDialog] = useState({
     open: false,
     technicianId: "",
+    technicianIds: [],
     repairText: "",
     smsMessage: ""
   });
@@ -2047,12 +2050,16 @@ function ClientList() {
     setPage(0);
   }, [statusFilter, debouncedSearch, dueDateFilter]);
 
-  const selectedRepairTechnician = technicians.find(
-    (user) => String(user.ID || "") === String(repairDialog.technicianId)
+  const selectedRepairTechnicians = technicians.filter((user) =>
+    (repairDialog.technicianIds || []).includes(String(user.ID || ""))
   );
+  const selectedRepairTechnicianNames = selectedRepairTechnicians
+    .map((user) => user.Name || user.Username)
+    .filter(Boolean)
+    .join(", ");
   const repairSmsPreview = repairSmsTemplate?.Body
     ? replaceTemplateTokens(repairSmsTemplate.Body, {
-        TechnicianName: selectedRepairTechnician?.Name || "",
+        TechnicianName: selectedRepairTechnicianNames,
         ClientName:
           selectedClient?.ClientName || selectedClient?.AccountName || "",
         AccountName: selectedClient?.AccountName || "",
@@ -3887,6 +3894,7 @@ function ClientList() {
     setRepairDialog({
       open: true,
       technicianId: "",
+      technicianIds: [],
       repairText: "",
       smsMessage: ""
     });
@@ -3904,6 +3912,7 @@ function ClientList() {
     setRepairDialog({
       open: false,
       technicianId: "",
+      technicianIds: [],
       repairText: "",
       smsMessage: ""
     });
@@ -3916,8 +3925,8 @@ function ClientList() {
       return;
     }
 
-    if (!repairDialog.technicianId) {
-      showMessage("Technician Required", "Please choose a technician.", "warning");
+    if (!repairDialog.technicianIds?.length) {
+      showMessage("Technician Required", "Please choose at least one technician.", "warning");
       return;
     }
 
@@ -3932,8 +3941,8 @@ function ClientList() {
       setRepairSaving(true);
 
       const { data } = await API.post(`/clients/${selectedClient._id}/repair`, {
-        technicianId: repairDialog.technicianId,
-        technicianName: selectedRepairTechnician?.Name || "",
+        technicianIds: repairDialog.technicianIds,
+        technicianName: selectedRepairTechnicianNames,
         repairText: finalSmsMessage,
         smsMessage: finalSmsMessage
       });
@@ -3943,7 +3952,7 @@ function ClientList() {
       showMessage(
         smsSent ? "Repair SMS Sent" : "Repair SMS Skipped",
         smsSent
-          ? `Repair request for ${selectedClient.AccountName || selectedClient.ClientName || "client"} was sent to ${selectedRepairTechnician?.Name || "the selected technician"}.`
+          ? `Repair request for ${selectedClient.AccountName || selectedClient.ClientName || "client"} was sent to ${selectedRepairTechnicianNames || "the selected technicians"}.`
           : data?.message || "Repair request SMS was skipped.",
         smsSent ? "success" : "warning"
       );
@@ -5848,9 +5857,167 @@ function ClientList() {
 
       {loading && <p>Loading...</p>}
 
+      <Box
+        sx={{
+          display: { xs: "grid", md: "none" },
+          gap: 1.25
+        }}
+      >
+        {clients.map((c) => {
+          const displayedPaymentStatus = getDisplayedPaymentStatus(c);
+          const isPaid = displayedPaymentStatus === "PAID";
+          const disconnectDaysDisplay = getDisconnectDaysDisplay(c, displayedPaymentStatus);
+          const authMode = getNormalizedAuthMode(c.AuthenticationMode) || "N/A";
+          const dueDateText = c.DueDate
+            ? new Date(c.DueDate).toLocaleDateString("en-PH", {
+                year: "numeric",
+                month: "short",
+                day: "numeric"
+              })
+            : "N/A";
+
+          return (
+            <Paper
+              key={c._id}
+              onContextMenu={(e) => handleRightClick(e, c)}
+              sx={{
+                p: 1.5,
+                borderRadius: 3,
+                border: "1px solid #dbe4ee",
+                boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+                backgroundColor: isPaid ? "#ffffff" : "#fcfdff"
+              }}
+            >
+              <Stack spacing={1.1}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 800, color: "#0f172a", fontSize: "0.9rem", wordBreak: "break-word" }}>
+                      {c.ClientName || "-"}
+                    </Typography>
+                    <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                      {c.AccountName || "-"}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={displayedPaymentStatus}
+                    size="small"
+                    sx={{
+                      flexShrink: 0,
+                      borderRadius: "999px",
+                      backgroundColor: isPaid ? "#e8f5e9" : "#f1f5f9",
+                      color: isPaid ? "#2e7d32" : "#475569",
+                      fontWeight: 800
+                    }}
+                  />
+                </Stack>
+
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 0.75
+                  }}
+                >
+                  <Box>
+                    <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
+                    <Typography sx={{ color: "#334155", fontWeight: 800, fontSize: "0.74rem" }}>
+                      {c.NetPlan || "-"} - {authMode}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                    <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                      {dueDateText}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
+                    <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                      PHP {c.AmountDue}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DISCONNECT</Typography>
+                    <Chip
+                      label={disconnectDaysDisplay.label}
+                      size="small"
+                      sx={{
+                        borderRadius: "999px",
+                        backgroundColor: disconnectDaysDisplay.backgroundColor,
+                        color: disconnectDaysDisplay.color,
+                        fontWeight: 800
+                      }}
+                    />
+                  </Box>
+                </Box>
+
+                <Stack direction="row" spacing={0.25} flexWrap="wrap" useFlexGap>
+                  <Tooltip title="Update">
+                    <IconButton sx={{ color: "#2563eb" }} onClick={() => navigate(`/clients/${c._id}/edit`)}>
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Billing">
+                    <IconButton sx={{ color: "#0891b2" }} onClick={() => handleOpenBillingPeriodDialog(c)}>
+                      <ReceiptIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Pay">
+                    <IconButton sx={{ color: "#16a34a" }} onClick={() => handleOpenPaymentModal(c)}>
+                      <PaymentIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Payment History">
+                    <IconButton sx={{ color: "#7c3aed" }} onClick={() => handleOpenPaymentHistoryModal(c)}>
+                      <HistoryEduOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="SMS">
+                    <IconButton sx={{ color: "#0f766e" }} onClick={() => handleOpenSmsConfirmDialog(c)}>
+                      <SmsOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Repair">
+                    <IconButton sx={{ color: "#ea580c" }} onClick={() => handleOpenRepairDialog(c)}>
+                      <BuildCircleOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      String(c.AuthenticationMode || "").trim().toUpperCase() === "PPPOE"
+                        ? "Refresh Mode"
+                        : "Refresh Mode is only available for PPPoE"
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        sx={{ color: "#0284c7" }}
+                        onClick={() => openClientActionConfirm("refresh", c)}
+                        disabled={
+                          refreshModeSaving ||
+                          String(c.AuthenticationMode || "").trim().toUpperCase() !== "PPPOE"
+                        }
+                      >
+                        <AutorenewIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Router">
+                    <IconButton sx={{ color: "#4f46e5" }} onClick={() => handleOpenMikrotikStatusModal(c)}>
+                      <RouterIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </Stack>
+            </Paper>
+          );
+        })}
+      </Box>
+
         <TableContainer
           component={Paper}
           sx={{
+            display: { xs: "none", md: "block" },
             borderRadius: 4,
             overflow: "hidden",
             border: "1px solid #dbe4ee",
@@ -8001,16 +8168,25 @@ function ClientList() {
           >
             <TextField
               select
-              label="Technician"
-              value={repairDialog.technicianId}
+              label="Technicians"
+              value={repairDialog.technicianIds}
               onChange={(event) =>
                 setRepairDialog((prev) => ({
                   ...prev,
-                  technicianId: event.target.value
+                  technicianIds: event.target.value
                 }))
               }
+              SelectProps={{
+                multiple: true,
+                renderValue: (selected) =>
+                  technicians
+                    .filter((tech) => selected.includes(String(tech.ID || "")))
+                    .map((tech) => tech.Name || tech.Username)
+                    .filter(Boolean)
+                    .join(", ")
+              }}
               fullWidth
-              helperText="Choose the technician who will handle this repair."
+              helperText="Choose one or more technicians who will handle this repair."
             >
               {technicians.length === 0 ? (
                 <MenuItem value="" disabled>
@@ -8018,7 +8194,7 @@ function ClientList() {
                 </MenuItem>
               ) : (
                 technicians.map((tech) => (
-                  <MenuItem key={tech.ID || tech.Username} value={tech.ID}>
+                  <MenuItem key={tech.ID || tech.Username} value={String(tech.ID || "")}>
                     {tech.Name || tech.Username}
                   </MenuItem>
                 ))
@@ -8135,9 +8311,174 @@ function ClientList() {
               <Typography>Loading payment history...</Typography>
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {paymentHistoryRows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No payment history found.
+                </Typography>
+              ) : (
+                paymentHistoryRows.map((row) => {
+                  const historyRowKey = row._id || `${row.Invoice}-${row.TransactionDate}`;
+                  const earningRows = Array.isArray(row.EarningRows) ? row.EarningRows : [];
+                  const isExpanded = expandedPaymentHistoryRowId === String(historyRowKey);
+
+                  return (
+                    <Card
+                      key={`mobile-history-${historyRowKey}`}
+                      sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                      onClick={() =>
+                        setExpandedPaymentHistoryRowId((prev) =>
+                          prev === String(historyRowKey) ? "" : String(historyRowKey)
+                        )
+                      }
+                    >
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                                {row.PaymentReceipt || row.Invoice || "-"}
+                              </Typography>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                                {row.TransactionDate ? new Date(row.TransactionDate).toLocaleString("en-PH") : "-"}
+                              </Typography>
+                            </Box>
+                            <Typography sx={{ fontWeight: 900, color: "#15803d", flexShrink: 0 }}>
+                              PHP {Number(row.TotalAmount || row.Cash || 0).toLocaleString()}
+                            </Typography>
+                          </Stack>
+
+                          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>MODE</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{formatPrintPaymentMode(row)}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>BALANCE</Typography>
+                              <Typography sx={{ fontWeight: 800 }}>PHP {Number(row.Balance || 0).toLocaleString()}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                              <Typography sx={{ fontWeight: 800 }}>{row.DueDate ? new Date(row.DueDate).toLocaleDateString("en-PH") : "-"}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.NetPlan || "-"}</Typography>
+                            </Box>
+                          </Box>
+
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Ref: {formatPrintReference(row)}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Cover: {row.Cover || "-"} | Created by: {row.CreatedBy || row.CreatedById || "-"}
+                          </Typography>
+
+                          <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                            <Tooltip title="Open eReceipt">
+                              <span>
+                                <IconButton
+                                  color="success"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleOpenPaymentHistoryEReceipt(row);
+                                  }}
+                                >
+                                  <ContentCopyIcon />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Reprint Receipt">
+                              <span>
+                                <IconButton
+                                  color="primary"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleReprintPaymentHistory(row);
+                                  }}
+                                >
+                                  <ReceiptIcon />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            {isAdminUser ? (
+                              <Tooltip title="Delete Payment History">
+                                <span>
+                                  <IconButton
+                                    color="error"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenDeleteHistoryDialog(row);
+                                    }}
+                                    disabled={!row._id}
+                                  >
+                                    <DeleteOutlineOutlinedIcon />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                          </Stack>
+
+                          {earningRows.length && isExpanded ? (
+                            <Box sx={{ background: "#f8fafc", borderRadius: 2, p: 1 }}>
+                              <Typography sx={{ fontWeight: 800, mb: 1 }}>Payment Entries</Typography>
+                              <Stack spacing={1}>
+                                {earningRows.map((earningRow, index) => (
+                                  <Box
+                                    key={earningRow._id || `${historyRowKey}-mobile-earning-${index}`}
+                                    sx={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 2, p: 1 }}
+                                  >
+                                    <Typography sx={{ fontWeight: 800 }}>
+                                      {earningRow.MOP || earningRow.PaymentMethod || "-"} | PHP {Number(earningRow.Cash || earningRow.TotalAmount || 0).toLocaleString()}
+                                    </Typography>
+                                    <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                      Ref: {earningRow.MOPRef || earningRow.ReferenceNumber || earningRow.Invoice || "-"}
+                                    </Typography>
+                                    <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                      Transfer: {earningRow.TransferDate || "-"} | Receiver: {earningRow.ReceiverLast4 || "-"}
+                                    </Typography>
+                                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5 }}>
+                                      {earningRow.ReceiptImage ? (
+                                        <Button
+                                          variant="text"
+                                          size="small"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleOpenReceiptImagePreview(earningRow.ReceiptImage);
+                                          }}
+                                          sx={{ textTransform: "none", minWidth: 0, px: 0, fontWeight: 700 }}
+                                        >
+                                          View Receipt
+                                        </Button>
+                                      ) : null}
+                                      <Typography
+                                        sx={{
+                                          fontSize: "0.75rem",
+                                          fontWeight: 800,
+                                          color: earningRow.Verified ? "#15803d" : "#b45309"
+                                        }}
+                                      >
+                                        {earningRow.Verified ? "VALIDATED" : "PENDING"}
+                                      </Typography>
+                                    </Stack>
+                                  </Box>
+                                ))}
+                              </Stack>
+                            </Box>
+                          ) : null}
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </Box>
+
             <TableContainer
               component={Paper}
               sx={{
+                display: { xs: "none", md: "block" },
                 borderRadius: 3,
                 overflow: "hidden",
                 border: "1px solid #dbe4ee",
@@ -8333,6 +8674,7 @@ function ClientList() {
                 </TableBody>
               </Table>
             </TableContainer>
+            </>
           )}
         </DialogContent>
 

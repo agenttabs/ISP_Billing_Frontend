@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -154,6 +155,68 @@ export default function SystemLogs() {
                 <CircularProgress />
               </Box>
             ) : (
+              <>
+              <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25, p: 1.25 }}>
+                {!logs.length ? (
+                  <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                    No system logs found.
+                  </Typography>
+                ) : (
+                  logs.map((row) => (
+                    <Card
+                      key={row._id}
+                      sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                    >
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                                {row.Module || "-"}
+                              </Typography>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                                {formatDateTime(row.createdAt)}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              size="small"
+                              color={
+                                row.Status === "SUCCESS"
+                                  ? "success"
+                                  : row.Status === "FAILED"
+                                    ? "error"
+                                    : "default"
+                              }
+                              label={row.Status || "-"}
+                            />
+                          </Stack>
+                          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>ACTION</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Action || "-"}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>ACCOUNT</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.AccountName || "-"}</Typography>
+                            </Box>
+                          </Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Login: {row.Actor?.loginAccount || row.Actor?.username || row.Actor?.name || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#0f172a", fontSize: "0.78rem", wordBreak: "break-word" }}>
+                            {row.Summary || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                            {formatJsonPreview(row.Values || row.Details)}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </Box>
+
+              <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -211,6 +274,8 @@ export default function SystemLogs() {
                   )}
                 </TableBody>
               </Table>
+              </TableContainer>
+              </>
             )}
           </CardContent>
         </Card>

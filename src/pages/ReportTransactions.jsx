@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -250,6 +251,66 @@ export default function ReportTransactions() {
               <CircularProgress />
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {shouldWaitForAdminDateRange ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  Select a date range to view earnings.
+                </Typography>
+              ) : filteredRows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No earnings found.
+                </Typography>
+              ) : (
+                filteredRows.map((row) => (
+                  <Card
+                    key={row._id || `${row.Invoice}-${row.AccountName}-${row.TransactionDate}`}
+                    sx={{ borderRadius: 3, border: "1px solid #dbe4ee", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)" }}
+                  >
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>
+                              {row.AccountName || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                              {row.Item || row.ClientName || "-"}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontWeight: 900, color: "#0f172a", flexShrink: 0 }}>
+                            {formatMoney(row.Cash || row.TotalAmount)}
+                          </Typography>
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DATE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.TransactionDate ? new Date(row.TransactionDate).toLocaleString("en-PH") : "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>TYPE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.MOP || row.Type || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>INVOICE</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Invoice || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CREATED</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.DeclaredBy || row.CreatedBy || row.CreatedById || "-"}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.72rem" }}>
+                          Ref: {row.MOPRef || row.Reference || "-"} | Receiver: {row.ReceiverLast4 || row.GCashReceiverLast4 || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -312,6 +373,8 @@ export default function ReportTransactions() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
+            </>
           )}
         </CardContent>
       </Card>

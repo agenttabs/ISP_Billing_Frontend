@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -309,6 +310,70 @@ export default function SMSGateway() {
               Existing SMS Collection
             </Typography>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {rows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No SMS collection rows found.
+                </Typography>
+              ) : (
+                rows.map((row) => (
+                  <Card key={row._id} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                              {row.ServiceName || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                              Status: {row.Status || "-"} | Mode: {row.Mode || "-"}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-all" }}>
+                          {row.ApiUrl || "-"}
+                        </Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Device: {row.Device || "-"}
+                        </Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<SmsOutlinedIcon />}
+                            onClick={() => openTestDialog(row)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Test
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<EditOutlinedIcon />}
+                            onClick={() => handleEdit(row)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            startIcon={<DeleteOutlineOutlinedIcon />}
+                            onClick={() => handleDelete(row)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Delete
+                          </Button>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -371,6 +436,7 @@ export default function SMSGateway() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>

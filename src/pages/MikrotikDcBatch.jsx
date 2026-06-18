@@ -17,6 +17,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -363,6 +364,74 @@ export default function MikrotikDcBatch() {
                   Batch Result
                 </Typography>
 
+                <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+                  {visibleRows.length === 0 ? (
+                    <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                      No overdue non-bypass client needs a disconnect right now.
+                    </Typography>
+                  ) : (
+                    visibleRows.map((row, index) => {
+                      const chip = getResultChip(row.result);
+
+                      return (
+                        <Card
+                          key={`${row.accountName}-${index}`}
+                          sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                        >
+                          <CardContent>
+                            <Stack spacing={1}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                                    {row.accountName || "-"}
+                                  </Typography>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                    {row.clientName || "-"} | {row.authMode || "-"}
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  label={chip.label}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: chip.backgroundColor,
+                                    color: chip.color,
+                                    fontWeight: 700
+                                  }}
+                                />
+                              </Stack>
+                              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>{getRowDueDate(row)}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DISCONNECT</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>{getRowDisconnectDate(row)}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>OLD PROFILE</Typography>
+                                  <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.oldProfile || "-"}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>NEXT PLAN</Typography>
+                                  <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.nextPlan || "-"}</Typography>
+                                </Box>
+                              </Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                Old NetPlan: {row.oldNetPlan || "-"}
+                              </Typography>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                {row.detail || "-"}
+                              </Typography>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </Box>
+
+                <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -417,6 +486,7 @@ export default function MikrotikDcBatch() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </CardContent>
             </Card>
           </>

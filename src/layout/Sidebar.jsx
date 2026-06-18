@@ -18,7 +18,8 @@ import {
   DialogActions,
   TextField,
   Alert,
-  Button
+  Button,
+  useMediaQuery
 } from "@mui/material";
 
 import {
@@ -59,7 +60,9 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { clients } = useClient();
   const { user, logout, changePassword, loading: authLoading } = useAuth();
-  const [open, setOpen] = useState(true);
+  const isMobile = useMediaQuery("(max-width:700px)");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const open = isMobile ? false : sidebarOpen;
   const [reportsOpen, setReportsOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -669,7 +672,7 @@ export default function Sidebar() {
           </Box>
         )}
 
-        <IconButton onClick={() => setOpen(!open)}>
+        <IconButton onClick={() => setSidebarOpen((prev) => !prev)}>
           <MenuIcon />
         </IconButton>
       </Box>

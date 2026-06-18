@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography
@@ -86,7 +87,20 @@ export default function SystemDiagnostics() {
                   Configured Collections
                 </Typography>
 
-                <Box sx={{ width: "100%", minWidth: 0, overflowX: "auto" }}>
+                <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1 }}>
+                  {Object.entries(data.collections || {}).map(([key, value]) => (
+                    <Card key={key} sx={{ borderRadius: 2, border: "1px solid #dbe4ee" }}>
+                      <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+                        <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{key}</Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.78rem", overflowWrap: "anywhere" }}>
+                          {Array.isArray(value) ? value.join(", ") : String(value || "-")}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+
+                <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                   <Table size="small" sx={{ tableLayout: "fixed", minWidth: 0, width: "100%" }}>
                     <TableHead>
                       <TableRow>
@@ -105,7 +119,7 @@ export default function SystemDiagnostics() {
                       ))}
                     </TableBody>
                   </Table>
-                </Box>
+                </TableContainer>
               </CardContent>
             </Card>
 

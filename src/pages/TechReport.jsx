@@ -15,6 +15,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -243,42 +244,115 @@ export default function TechReport() {
                 <CircularProgress />
               </Box>
             ) : (
-              <Table size="small">
-                <TableHead>
-                  {filters.reportType === "REPAIR" ? (
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Date Done</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Account Name</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Action</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Done By</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Summary</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Information</TableCell>
-                    </TableRow>
-                  ) : (
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Date Installed</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Account Name</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Client Name</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Account No.</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Authentication</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Net Plan</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                    </TableRow>
-                  )}
-                </TableHead>
-                <TableBody>
-                  {!activeRows.length ? (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center">
-                        {filters.reportType === "REPAIR"
-                          ? "No repair-done records found yet."
-                          : "No installed client records found for the selected range."}
-                      </TableCell>
-                    </TableRow>
-                  ) : filters.reportType === "REPAIR" ? (
-                    activeRows.map((row) => (
-                      <TableRow key={String(row._id)}>
+              <>
+              <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25, p: 1.25 }}>
+                {!activeRows.length ? (
+                  <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                    {filters.reportType === "REPAIR"
+                      ? "No repair-done records found yet."
+                      : "No installed client records found for the selected range."}
+                  </Typography>
+                ) : filters.reportType === "REPAIR" ? (
+                  activeRows.map((row) => (
+                    <Card key={String(row._id)} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.AccountName || "-"}</Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>{formatDateTime(row.DateDone)}</Typography>
+                          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>ACTION</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Action || "-"}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DONE BY</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.DoneBy || "-"}</Typography>
+                            </Box>
+                          </Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Status: {row.Status || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            {row.Summary || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                            {formatInfoPreview(row.Information)}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  activeRows.map((row) => (
+                    <Card key={String(row._id)} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.ClientName || "-"}</Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            {row.AccountName || "-"} | {row.AccountNumber || "-"}
+                          </Typography>
+                          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>INSTALLED</Typography>
+                              <Typography sx={{ fontWeight: 800 }}>{formatDateOnly(row.DateInstalled)}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AUTH</Typography>
+                              <Typography sx={{ fontWeight: 800 }}>{row.AuthenticationMode || "-"}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.NetPlan || "-"}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>STATUS</Typography>
+                              <Typography sx={{ fontWeight: 800 }}>{row.Status || "-"}</Typography>
+                            </Box>
+                          </Box>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </Box>
+
+              <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 860 }}>
+                  <TableHead>
+                    {filters.reportType === "REPAIR" ? (
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Date Done</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Account Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Action</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Done By</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Summary</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Information</TableCell>
+                      </TableRow>
+                    ) : (
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Date Installed</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Account Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Client Name</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Account No.</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Authentication</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Net Plan</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                      </TableRow>
+                    )}
+                  </TableHead>
+                  <TableBody>
+                    {!activeRows.length ? (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center">
+                          {filters.reportType === "REPAIR"
+                            ? "No repair-done records found yet."
+                            : "No installed client records found for the selected range."}
+                        </TableCell>
+                      </TableRow>
+                    ) : filters.reportType === "REPAIR" ? (
+                      activeRows.map((row) => (
+                        <TableRow key={String(row._id)}>
                         <TableCell>{formatDateTime(row.DateDone)}</TableCell>
                         <TableCell>{row.AccountName || "-"}</TableCell>
                         <TableCell>{row.Action || "-"}</TableCell>
@@ -286,11 +360,11 @@ export default function TechReport() {
                         <TableCell>{row.Status || "-"}</TableCell>
                         <TableCell>{row.Summary || "-"}</TableCell>
                         <TableCell>{formatInfoPreview(row.Information)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    activeRows.map((row) => (
-                      <TableRow key={String(row._id)}>
+                        </TableRow>
+                      ))
+                    ) : (
+                      activeRows.map((row) => (
+                        <TableRow key={String(row._id)}>
                         <TableCell>{formatDateOnly(row.DateInstalled)}</TableCell>
                         <TableCell>{row.AccountName || "-"}</TableCell>
                         <TableCell>{row.ClientName || "-"}</TableCell>
@@ -298,11 +372,13 @@ export default function TechReport() {
                         <TableCell>{row.AuthenticationMode || "-"}</TableCell>
                         <TableCell>{row.NetPlan || "-"}</TableCell>
                         <TableCell>{row.Status || "-"}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              </>
             )}
           </CardContent>
         </Card>

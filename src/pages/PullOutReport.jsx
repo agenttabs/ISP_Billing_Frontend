@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -230,6 +231,60 @@ export default function PullOutReport() {
               <CircularProgress />
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {rows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No pull out candidates found for {appliedDays} day(s) overdue.
+                </Typography>
+              ) : (
+                rows.map((row) => (
+                  <Card key={row.clientId || row.accountName} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.accountName || "-"}</Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {row.clientName || "-"} | {row.authMode || "-"}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontWeight: 900, color: "error.main", flexShrink: 0 }}>
+                            {row.daysPastDue || 0}d
+                          </Typography>
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatDate(row.dueDate)}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PULL OUT</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatDate(row.eligibleDate)}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.netPlan || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
+                            <Typography sx={{ fontWeight: 900 }}>{formatMoney(row.amountDue)}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Contact: {row.contactNumber || "-"}
+                        </Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          {row.address || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -274,6 +329,8 @@ export default function PullOutReport() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
+            </>
           )}
         </CardContent>
       </Card>

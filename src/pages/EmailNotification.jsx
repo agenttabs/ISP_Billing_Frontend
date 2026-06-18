@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Stack,
@@ -412,6 +413,57 @@ export default function EmailNotification() {
                     overflowY: "auto"
                   }}
                 >
+                  <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1, p: 1 }}>
+                    {(form.AvailableClients || []).length > 0 ? (
+                      form.AvailableClients.map((client) => {
+                        const clientId = String(client._id || "");
+                        const checked = (form.ManualClientIds || []).includes(clientId);
+
+                        return (
+                          <Card
+                            key={`manual-client-card-${clientId || client.AccountName || client.Email}`}
+                            sx={{ borderRadius: 2, border: "1px solid #dbe4ee" }}
+                          >
+                            <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+                              <Stack direction="row" spacing={1} alignItems="flex-start">
+                                <Checkbox
+                                  checked={checked}
+                                  onChange={() => toggleManualClient(clientId)}
+                                  sx={{ p: 0.25 }}
+                                />
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                                    {client.AccountName || "-"}
+                                  </Typography>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                    {client.ClientName || "-"}
+                                  </Typography>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                    {client.Email || "-"}
+                                  </Typography>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                                    Due: {client.DueDate
+                                      ? new Date(client.DueDate).toLocaleDateString("en-PH", {
+                                          year: "numeric",
+                                          month: "short",
+                                          day: "numeric"
+                                        })
+                                      : "-"}
+                                  </Typography>
+                                </Box>
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        );
+                      })
+                    ) : (
+                      <Typography sx={{ color: "#64748b", py: 2 }}>
+                        No clients with valid email and Email Billing enabled are available yet.
+                      </Typography>
+                    )}
+                  </Box>
+
+                  <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
@@ -460,6 +512,7 @@ export default function EmailNotification() {
                       )}
                     </TableBody>
                   </Table>
+                  </TableContainer>
                 </Box>
               </Box>
 
@@ -505,6 +558,43 @@ export default function EmailNotification() {
                     backgroundColor: "#fff"
                   }}
                 >
+                  <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1, p: 1 }}>
+                    {(form.EligibleClients || []).length > 0 ? (
+                      form.EligibleClients.map((client) => (
+                        <Card
+                          key={`eligible-client-card-${client._id || client.AccountName || client.Email}`}
+                          sx={{ borderRadius: 2, border: "1px solid #dbe4ee" }}
+                        >
+                          <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                              {client.AccountName || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {client.ClientName || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {client.Email || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                              Due: {client.DueDate
+                                ? new Date(client.DueDate).toLocaleDateString("en-PH", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric"
+                                  })
+                                : "-"}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <Typography sx={{ color: "#64748b", py: 2 }}>
+                        No eligible client email accounts for the current schedule yet.
+                      </Typography>
+                    )}
+                  </Box>
+
+                  <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
@@ -541,6 +631,7 @@ export default function EmailNotification() {
                       )}
                     </TableBody>
                   </Table>
+                  </TableContainer>
                 </Box>
               </Box>
 

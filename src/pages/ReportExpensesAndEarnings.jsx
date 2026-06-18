@@ -12,6 +12,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -261,6 +262,74 @@ export default function ReportExpensesAndEarnings() {
               <CircularProgress />
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {shouldWaitForAdminDateRange ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  Select a date range to view the report.
+                </Typography>
+              ) : filteredRows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No expense or earning records found.
+                </Typography>
+              ) : (
+                filteredRows.map((row) => (
+                  <Card
+                    key={row._id}
+                    sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                  >
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                              {row.Name || row.AccountName || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {row.Source || "-"} | {row.Type || "-"}
+                            </Typography>
+                          </Box>
+                          <Chip
+                            size="small"
+                            label={row.EntryType || "-"}
+                            color={row.EntryType === "CREDIT" ? "success" : "error"}
+                          />
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DATE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>
+                              {row.TransactionDate ? new Date(row.TransactionDate).toLocaleString("en-PH") : "-"}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>INVOICE</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Invoice || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CREDIT</Typography>
+                            <Typography sx={{ color: "#15803d", fontWeight: 900 }}>
+                              {row.CreditAmount ? formatMoney(row.CreditAmount) : "-"}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DEBIT</Typography>
+                            <Typography sx={{ color: "#b91c1c", fontWeight: 900 }}>
+                              {row.DebitAmount ? formatMoney(row.DebitAmount) : "-"}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Account: {row.AccountName || "-"} | Created by: {row.CreatedBy || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -321,6 +390,8 @@ export default function ReportExpensesAndEarnings() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
+            </>
           )}
         </CardContent>
       </Card>

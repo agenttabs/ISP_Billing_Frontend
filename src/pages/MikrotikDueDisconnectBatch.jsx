@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -344,6 +345,79 @@ export default function MikrotikDueDisconnectBatch() {
                   Check the clients you want to disconnect manually. If no row is checked, `Run Now` will process all eligible rows.
                 </Typography>
 
+                <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+                  {(report.rows || []).length === 0 ? (
+                    <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                      No unpaid client is currently queued for disconnection.
+                    </Typography>
+                  ) : (
+                    (report.rows || []).map((row, index) => {
+                      const chip = getResultChip(row.result);
+                      const normalizedId = String(row.clientId || "").trim();
+                      const selectable = row.result === "READY_TO_DISCONNECT";
+                      const checked = selectable && selectedClientIds.includes(normalizedId);
+
+                      return (
+                        <Card key={`${row.accountName}-${index}`} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                          <CardContent>
+                            <Stack spacing={1}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                                <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
+                                  <Checkbox
+                                    checked={checked}
+                                    disabled={!selectable}
+                                    onChange={() => toggleClient(normalizedId)}
+                                    sx={{ p: 0.25 }}
+                                  />
+                                  <Box sx={{ minWidth: 0 }}>
+                                    <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.accountName || "-"}</Typography>
+                                    <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                      {row.clientName || "-"} | {row.authMode || "-"}
+                                    </Typography>
+                                  </Box>
+                                </Stack>
+                                <Chip
+                                  label={chip.label}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: chip.backgroundColor,
+                                    color: chip.color,
+                                    fontWeight: 700
+                                  }}
+                                />
+                              </Stack>
+                              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>{row.dueDate || "-"}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DISCONNECT</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>{row.disconnectDate || "-"}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DAYS OVER</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>{row.daysOverdue ?? "-"}</Typography>
+                                </Box>
+                                <Box>
+                                  <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
+                                  <Typography sx={{ fontWeight: 800 }}>
+                                    {Number(row.amountDue || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                {row.detail || "-"}
+                              </Typography>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </Box>
+
+                <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -414,6 +488,7 @@ export default function MikrotikDueDisconnectBatch() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </CardContent>
             </Card>
           </>

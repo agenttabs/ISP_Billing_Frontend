@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -457,6 +458,93 @@ export default function ExpenseInput() {
               />
             </Stack>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {!filteredRows.length ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No expense records found.
+                </Typography>
+              ) : (
+                filteredRows.map((row) => (
+                  <Card
+                    key={String(row._id)}
+                    sx={{
+                      borderRadius: 3,
+                      border: "1px solid #dbe4ee",
+                      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)"
+                    }}
+                  >
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>
+                              {row.Name || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                              {row.Type || "-"}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontWeight: 900, color: "#0f172a", flexShrink: 0 }}>
+                            {formatDisplayAmount(row.Amount)}
+                          </Typography>
+                        </Stack>
+
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>
+                              LOG DATE
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.LogDate || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>
+                              INVOICE
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Invoice || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>
+                              DOCS
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Docs || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>
+                              TECHNICIAN
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.TechnicianName || "-"}</Typography>
+                          </Box>
+                        </Box>
+
+                        <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                          Created by: {row.CreatedBy || row.InCharge || "-"}
+                        </Typography>
+
+                        <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                          {canEditRow(row) ? (
+                            <IconButton color="primary" onClick={() => handleEdit(row)}>
+                              <EditOutlinedIcon />
+                            </IconButton>
+                          ) : null}
+                          {!isCashier ? (
+                            <IconButton color="error" onClick={() => handleDelete(row._id)}>
+                              <DeleteOutlineIcon />
+                            </IconButton>
+                          ) : null}
+                          {!canEditRow(row) && isCashier ? (
+                            <Typography sx={{ color: "#64748b", fontWeight: 700, alignSelf: "center" }}>
+                              No action
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -509,6 +597,7 @@ export default function ExpenseInput() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>

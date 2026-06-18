@@ -13,6 +13,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -356,6 +357,66 @@ export default function MikrotikChecker() {
                   Checker Report
                 </Typography>
 
+                <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+                  {(report.rows || []).length === 0 ? (
+                    <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                      No issues found. MikroTik and system plans are balanced.
+                    </Typography>
+                  ) : (
+                    (report.rows || []).map((row, index) => (
+                      <Card
+                        key={`${row.issueType}-${row.accountName}-${index}`}
+                        sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                      >
+                        <CardContent>
+                          <Stack spacing={1}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                                  {row.accountName || "-"}
+                                </Typography>
+                                <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                                  {row.clientName || "-"} | {formatAuthMode(row.authMode)}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                label={getIssueLabel(row.issueType)}
+                                size="small"
+                                sx={{
+                                  fontWeight: 700,
+                                  ...getIssueChipColors(row.issueType)
+                                }}
+                              />
+                            </Stack>
+                            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                              <Box>
+                                <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>SYSTEM PLAN</Typography>
+                                <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.systemPlan || "-"}</Typography>
+                              </Box>
+                              <Box>
+                                <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>MIKROTIK PLAN</Typography>
+                                <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.mikrotikPlan || "-"}</Typography>
+                              </Box>
+                              <Box>
+                                <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>SYSTEM MAC</Typography>
+                                <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.systemMacAddress || "-"}</Typography>
+                              </Box>
+                              <Box>
+                                <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>MIKROTIK MAC</Typography>
+                                <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.mikrotikMacAddress || "-"}</Typography>
+                              </Box>
+                            </Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {row.detail || "-"}
+                            </Typography>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </Box>
+
+                <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -403,6 +464,7 @@ export default function MikrotikChecker() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </CardContent>
             </Card>
           </>

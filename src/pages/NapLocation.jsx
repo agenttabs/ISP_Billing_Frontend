@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -396,6 +397,58 @@ export default function NapLocation() {
               />
             </Stack>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {!filteredRows.length ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No NAP location records found.
+                </Typography>
+              ) : (
+                filteredRows.map((row) => (
+                  <Card key={String(row._id)} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Name || "-"}</Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {row.NapCode || "-"} | {row.FiberLine || "-"}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem", fontWeight: 800 }}>
+                            {row.Status || "-"}
+                          </Typography>
+                        </Stack>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          {row.Address || "-"}
+                        </Typography>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>COORDINATES</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                              {row.Latitude && row.Longitude ? `${row.Latitude}, ${row.Longitude}` : "-"}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CREATED</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatDateTime(row.createdAt)}</Typography>
+                          </Box>
+                        </Box>
+                        <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                          <IconButton color="primary" onClick={() => handleEdit(row)}>
+                            <EditOutlinedIcon />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => handleDelete(row._id)}>
+                            <DeleteOutlineIcon />
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -445,6 +498,7 @@ export default function NapLocation() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>

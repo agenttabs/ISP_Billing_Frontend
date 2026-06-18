@@ -20,3 +20,69 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+@media (max-width: 700px) {
+  html,
+  body,
+  #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .MuiTable-root {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .MuiTable-root .MuiTableCell-root {
+    white-space: nowrap;
+  }
+
+  .MuiTable-root .MuiTableCell-root .MuiTypography-root {
+    white-space: normal;
+  }
+
+  .MuiDialog-paper {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px !important;
+  }
+
+  .MuiDialogContent-root {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .MuiCardContent-root {
+    padding: 10px !important;
+  }
+
+  .MuiTabs-root {
+    max-width: calc(100vw - 80px);
+  }
+
+  .MuiTabs-scroller {
+    overflow-x: auto !important;
+  }
+
+  .MuiTab-root {
+    min-width: 84px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .MuiIconButton-root {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .MuiButton-root {
+    min-height: 34px;
+  }
+
+  .MuiFormControl-root,
+  .MuiTextField-root {
+    max-width: 100%;
+  }
+}

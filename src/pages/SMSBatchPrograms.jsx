@@ -16,6 +16,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -408,6 +409,83 @@ export default function SMSBatchPrograms() {
               Existing Batch Programs
             </Typography>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {programs.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No SMS batch programs found.
+                </Typography>
+              ) : (
+                programs.map((program) => (
+                  <Card key={program._id} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{program.Name || "-"}</Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {program.TemplateType || "-"} | {program.SendTime || "-"}
+                            </Typography>
+                          </Box>
+                          <Chip
+                            label={program.IsActive ? "Active" : "Inactive"}
+                            color={program.IsActive ? "success" : "default"}
+                            size="small"
+                          />
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>RULE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{program.RecipientRule || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>OFFSET</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{program.DaysOffset}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: program.LastError ? "#b91c1c" : "#64748b", fontSize: "0.75rem", fontWeight: program.LastError ? 800 : 500, wordBreak: "break-word" }}>
+                          {program.LastError || program.LastRunSummary || "No run history yet."}
+                        </Typography>
+                        <Typography sx={{ whiteSpace: "pre-wrap", color: "#64748b", fontSize: "0.72rem" }}>
+                          {program.Body || "-"}
+                        </Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<PlayArrowOutlinedIcon />}
+                            onClick={() => handleRunNow(program)}
+                            disabled={runNowId === String(program._id)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            {runNowId === String(program._id) ? "Running..." : "Run Now"}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<VisibilityOutlinedIcon />}
+                            onClick={() => handleViewRecipients(program)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            View List
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<EditOutlinedIcon />}
+                            onClick={() => handleEdit(program)}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                          >
+                            Edit
+                          </Button>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -502,6 +580,7 @@ export default function SMSBatchPrograms() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>
@@ -529,6 +608,41 @@ export default function SMSBatchPrograms() {
                   Total Recipients: {recipientCount.toLocaleString("en-PH")}
                 </Typography>
 
+                <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1 }}>
+                  {recipientRows.length === 0 ? (
+                    <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                      No recipients found for this batch today.
+                    </Typography>
+                  ) : (
+                    recipientRows.map((row) => (
+                      <Card
+                        key={`recipient-card-${String(row._id || row.AccountNumber || row.AccountName)}`}
+                        sx={{ borderRadius: 2, border: "1px solid #dbe4ee" }}
+                      >
+                        <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.ClientName || "-"}</Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            {row.AccountName || "-"} | {row.AccountNumber || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Contact: {row.ContactNumber || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                            Due: {formatDateTime(row.DueDate)} | {row.PaymentStatus || "-"}
+                          </Typography>
+                          <Typography sx={{ fontWeight: 800 }}>
+                            {Number(row.AmountDue || 0).toLocaleString("en-PH", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            })}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </Box>
+
+                <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -570,6 +684,7 @@ export default function SMSBatchPrograms() {
                     )}
                   </TableBody>
                 </Table>
+                </TableContainer>
               </>
             )}
           </Stack>

@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -257,6 +258,41 @@ export default function SMSRecepients() {
               Existing SMS Templates
             </Typography>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {templates.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No SMS templates found.
+                </Typography>
+              ) : (
+                templates.map((template) => (
+                  <Card key={template._id} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                            {template.TYPE || "-"}
+                          </Typography>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<EditOutlinedIcon />}
+                            onClick={() => handleEdit(template)}
+                            sx={{ textTransform: "none", fontWeight: 700, flexShrink: 0 }}
+                          >
+                            Edit
+                          </Button>
+                        </Stack>
+                        <Typography sx={{ whiteSpace: "pre-wrap", color: "#475569", fontSize: "0.78rem" }}>
+                          {template.Body || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -302,6 +338,7 @@ export default function SMSRecepients() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
 

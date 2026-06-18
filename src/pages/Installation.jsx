@@ -11,10 +11,12 @@ import {
   DialogContent,
   DialogTitle,
   MenuItem,
+  Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Tab,
@@ -74,6 +76,7 @@ export default function Installation() {
   const [success, setSuccess] = useState("");
   const [rescheduleRow, setRescheduleRow] = useState(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  const [detailsRow, setDetailsRow] = useState(null);
 
   const loadRows = async () => {
     try {
@@ -244,6 +247,24 @@ export default function Installation() {
     return displayName || "-";
   };
 
+  const renderDetail = (label, value) => (
+    <Box
+      sx={{
+        border: "1px solid #dbe4f0",
+        borderRadius: 2,
+        p: 1.25,
+        backgroundColor: "#f8fafc"
+      }}
+    >
+      <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 800, textTransform: "uppercase" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ color: "#0f172a", fontWeight: 700, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
+        {value || "-"}
+      </Typography>
+    </Box>
+  );
+
   return (
     <Box>
       <Stack spacing={3}>
@@ -355,30 +376,175 @@ export default function Installation() {
               <Tab value="DONE" label={`Done (${counts.done})`} />
             </Tabs>
 
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Customer</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Contact</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Plan</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Installation Date</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Transfer Date</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Status Changed By</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Note</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {displayedRows.length === 0 ? (
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {displayedRows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No installation records found.
+                </Typography>
+              ) : (
+                displayedRows.map((row) => (
+                  <Paper
+                    key={row._id}
+                    onClick={() => {
+                      if (userType === "TECHNICIAN") setDetailsRow(row);
+                    }}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 3,
+                      border: "1px solid #dbe4f0",
+                      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+                      cursor: userType === "TECHNICIAN" ? "pointer" : "default"
+                    }}
+                  >
+                    <Stack spacing={1.1}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 800, color: "#0f172a", fontSize: "0.9rem", wordBreak: "break-word" }}>
+                            {row.CustomerName || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                            {row.ContactNumber || "-"}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          size="small"
+                          label={getStatusLabel(row.Status)}
+                          color={getStatusColor(row.Status)}
+                          variant="outlined"
+                          sx={{ flexShrink: 0, fontWeight: 800 }}
+                        />
+                      </Stack>
+
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
+                          <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                            {row.Plan || "-"}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>INSTALL DATE</Typography>
+                          <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                            {formatDate(row.InstallationDate)}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>TRANSFER</Typography>
+                          <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                            {formatDate(row.TransferDate)}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CHANGED BY</Typography>
+                          <Typography sx={{ color: "#0f172a", fontWeight: 800, fontSize: "0.74rem" }}>
+                            {formatStatusChangedBy(row)}
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {row.Note ? (
+                        <Typography sx={{ color: "#475569", fontSize: "0.72rem", whiteSpace: "pre-wrap" }}>
+                          {row.Note}
+                        </Typography>
+                      ) : null}
+
+                      <Stack direction="row" spacing={0.25} flexWrap="wrap" useFlexGap onClick={(event) => event.stopPropagation()}>
+                        {userType === "TECHNICIAN" ? (
+                          <Tooltip title="Resched">
+                            <IconButton size="small" color="primary" onClick={() => openReschedule(row)}>
+                              <EventRepeatOutlined fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="Edit">
+                            <IconButton size="small" color="primary" onClick={() => editRow(row)}>
+                              <EditOutlined fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title="Set Pending">
+                          <IconButton
+                            size="small"
+                            color="warning"
+                            disabled={saving || String(row.Status || "").toUpperCase() === "PENDING" || !canSetPending(row)}
+                            onClick={() => changeStatus(row, "PENDING")}
+                          >
+                            <PendingActionsOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Set Ongoing">
+                          <IconButton
+                            size="small"
+                            color="info"
+                            disabled={
+                              saving ||
+                              String(row.Status || "").toUpperCase() === "ONGOING" ||
+                              !canChangeFromOngoing(row, "ONGOING")
+                            }
+                            onClick={() => changeStatus(row, "ONGOING")}
+                          >
+                            <PlayCircleOutline fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Set Done">
+                          <IconButton
+                            size="small"
+                            color="success"
+                            disabled={saving || String(row.Status || "").toUpperCase() === "DONE" || !canChangeFromOngoing(row, "DONE")}
+                            onClick={() => changeStatus(row, "DONE")}
+                          >
+                            <CheckCircleOutline fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Set Cancel">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            disabled={saving || String(row.Status || "").toUpperCase() === "CANCEL" || !canChangeFromOngoing(row, "CANCEL")}
+                            onClick={() => changeStatus(row, "CANCEL")}
+                          >
+                            <CancelOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
+              <Table size="small" sx={{ minWidth: 920 }}>
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={9} align="center">
-                      No installation records found.
-                    </TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Customer</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Contact</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Plan</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Installation Date</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Transfer Date</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Status Changed By</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Note</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Action</TableCell>
                   </TableRow>
-                ) : (
-                  displayedRows.map((row) => (
-                    <TableRow key={row._id}>
+                </TableHead>
+                <TableBody>
+                  {displayedRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} align="center">
+                        No installation records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    displayedRows.map((row) => (
+                      <TableRow
+                        key={row._id}
+                        hover={userType === "TECHNICIAN"}
+                        onClick={() => {
+                          if (userType === "TECHNICIAN") setDetailsRow(row);
+                        }}
+                        sx={{ cursor: userType === "TECHNICIAN" ? "pointer" : "default" }}
+                      >
                       <TableCell>
                         <Chip
                           size="small"
@@ -394,7 +560,7 @@ export default function Installation() {
                       <TableCell>{formatDate(row.TransferDate)}</TableCell>
                       <TableCell>{formatStatusChangedBy(row)}</TableCell>
                       <TableCell>{row.Note || "-"}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(event) => event.stopPropagation()}>
                         <Stack direction="row" spacing={0.5}>
                           {userType === "TECHNICIAN" ? (
                             <Tooltip title="Resched">
@@ -455,11 +621,12 @@ export default function Installation() {
                           </Tooltip>
                         </Stack>
                       </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>
@@ -488,6 +655,33 @@ export default function Installation() {
           <Button variant="contained" onClick={saveReschedule} disabled={saving || !rescheduleDate}>
             Save
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(detailsRow)} onClose={() => setDetailsRow(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Installation Details</DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+              gap: 1.25,
+              pt: 1
+            }}
+          >
+            {renderDetail("Status", getStatusLabel(detailsRow?.Status))}
+            {renderDetail("Customer", detailsRow?.CustomerName)}
+            {renderDetail("Contact", detailsRow?.ContactNumber)}
+            {renderDetail("Plan", detailsRow?.Plan)}
+            {renderDetail("Installation Date", formatDate(detailsRow?.InstallationDate))}
+            {renderDetail("Transfer Date", formatDate(detailsRow?.TransferDate))}
+            {renderDetail("Status Changed By", detailsRow ? formatStatusChangedBy(detailsRow) : "-")}
+            {renderDetail("Note", detailsRow?.Note)}
+            {renderDetail("Address", detailsRow?.Address)}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsRow(null)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

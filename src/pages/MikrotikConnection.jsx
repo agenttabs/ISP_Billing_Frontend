@@ -12,6 +12,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -314,6 +315,57 @@ export default function MikrotikConnection() {
               />
             </Stack>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {!filteredRows.length ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No MikroTik connection records found.
+                </Typography>
+              ) : (
+                filteredRows.map((row) => (
+                  <Card key={String(row._id)} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.Name || "-"}</Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                              {row.Address || "-"}:{row.Port || 8728}
+                            </Typography>
+                          </Box>
+                          {row.IsDefault ? <Chip label="DEFAULT" size="small" color="success" sx={{ fontWeight: 700 }} /> : null}
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>TYPE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.ServerType || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>USER</Typography>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.User || "-"}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Notes: {row.Notes || "-"}
+                        </Typography>
+                        <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                          <IconButton color="primary" onClick={() => handleEdit(row)}>
+                            <EditOutlinedIcon />
+                          </IconButton>
+                          <IconButton color="info" onClick={() => handleTest(row._id)}>
+                            <WifiTetheringOutlinedIcon />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => handleDelete(row._id)}>
+                            <DeleteOutlineIcon />
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -368,6 +420,7 @@ export default function MikrotikConnection() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>

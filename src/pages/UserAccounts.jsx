@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -429,6 +430,66 @@ export default function UserAccounts() {
               Existing Login Accounts
             </Typography>
 
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {users.map((accountUser) => (
+                <Card
+                  key={accountUser.ID}
+                  sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                >
+                  <CardContent>
+                    <Stack spacing={1}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                            {accountUser.Name || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            {accountUser.Username || "-"} | ID {accountUser.ID || "-"}
+                          </Typography>
+                        </Box>
+                        <IconButton color="primary" onClick={() => handleEdit(accountUser)}>
+                          <EditOutlinedIcon />
+                        </IconButton>
+                      </Stack>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip size="small" label={accountUser.Type || "-"} color="primary" variant="outlined" />
+                        <Chip size="small" label={accountUser.Status || "ACTIVE"} color={accountUser.Status === "DEACTIVE" ? "warning" : "success"} />
+                      </Stack>
+                      {String(accountUser.Type || "").toUpperCase() === "CASHIER" ? (
+                        <Chip
+                          label={formatScheduleDays(getUserScheduleDays(accountUser))}
+                          size="small"
+                          color={getUserScheduleDays(accountUser).length ? "success" : "warning"}
+                          variant="outlined"
+                          sx={{ alignSelf: "flex-start" }}
+                        />
+                      ) : null}
+                      {String(accountUser.Type || "").toUpperCase() === "TECHNICIAN" ? (
+                        <Chip
+                          label={formatPayrollSchedule(accountUser.PayrollSchedule)}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          sx={{ alignSelf: "flex-start" }}
+                        />
+                      ) : null}
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>EMAIL</Typography>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{accountUser.Email || "-"}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CONTACT</Typography>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{accountUser.Contact || "-"}</Typography>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -487,6 +548,7 @@ export default function UserAccounts() {
                 ))}
               </TableBody>
             </Table>
+            </TableContainer>
           </CardContent>
         </Card>
       </Stack>

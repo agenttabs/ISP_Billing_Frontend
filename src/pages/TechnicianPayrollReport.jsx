@@ -14,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -259,6 +260,91 @@ function PayrollRow({ row }) {
   );
 }
 
+function PayrollMobileCard({ row }) {
+  const [open, setOpen] = useState(false);
+  const advances = Array.isArray(row.cashAdvances) ? row.cashAdvances : [];
+  const hasAdvances = advances.length > 0;
+
+  return (
+    <Card sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+      <CardContent>
+        <Stack spacing={1.25}>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 900, color: "#0f172a", wordBreak: "break-word" }}>
+                {row.name || "-"}
+              </Typography>
+              <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                {row.payrollScheduleLabel || "-"}
+              </Typography>
+            </Box>
+            <IconButton size="small" onClick={() => setOpen((prev) => !prev)} disabled={!hasAdvances}>
+              {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+            </IconButton>
+          </Stack>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PERIOD START</Typography>
+              <Typography sx={{ fontWeight: 800 }}>{formatDate(row.cutoffStartDate)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CUTOFF</Typography>
+              <Typography sx={{ fontWeight: 800 }}>{formatDate(row.cutoffDate)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>MONTHLY</Typography>
+              <Typography sx={{ fontWeight: 800 }}>{formatMoney(row.monthlySalary)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CUTOFF SALARY</Typography>
+              <Typography sx={{ color: "#2563eb", fontWeight: 900 }}>{formatMoney(row.grossSalary)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CASH ADVANCE</Typography>
+              <Typography sx={{ color: "#dc2626", fontWeight: 900 }}>{formatMoney(row.cashAdvanceTotal)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CARRY OVER</Typography>
+              <Typography sx={{ color: "#b45309", fontWeight: 900 }}>{formatMoney(row.cashAdvanceCarryOver)}</Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ borderTop: "1px solid #e2e8f0", pt: 1 }}>
+            <Typography sx={{ color: "#15803d", fontWeight: 900, fontSize: "1rem" }}>
+              Net Salary: {formatMoney(row.netSalary)}
+            </Typography>
+          </Box>
+
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <Stack spacing={1} sx={{ background: "#f8fafc", borderRadius: 2, p: 1 }}>
+              {Number(row.cashAdvanceCarryOver || 0) > 0 ? (
+                <Alert severity="warning">
+                  {formatMoney(row.cashAdvanceCarryOver)} will carry over to the next cutoff.
+                </Alert>
+              ) : null}
+              {advances.map((advance) => (
+                <Box
+                  key={advance._id}
+                  sx={{ border: "1px solid #e2e8f0", borderRadius: 2, p: 1, background: "#fff" }}
+                >
+                  <Typography sx={{ fontWeight: 800 }}>{formatMoney(advance.amount)}</Typography>
+                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                    {formatDate(advance.date)} | {advance.name || "-"}
+                  </Typography>
+                  <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                    Invoice: {advance.invoice || "-"} | Docs: {advance.docs || "-"}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Collapse>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function TechnicianPayrollReport() {
   const [cutoffDate, setCutoffDate] = useState(getDefaultPayrollCutoffDate());
   const [rows, setRows] = useState([]);
@@ -436,6 +522,20 @@ export default function TechnicianPayrollReport() {
               <CircularProgress />
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {includedRows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No technician payroll schedule matches this cutoff date.
+                </Typography>
+              ) : (
+                includedRows.map((row) => (
+                  <PayrollMobileCard key={row.technicianId || row.username} row={row} />
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -465,6 +565,8 @@ export default function TechnicianPayrollReport() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
+            </>
           )}
         </CardContent>
       </Card>

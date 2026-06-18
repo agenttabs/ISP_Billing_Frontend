@@ -16,6 +16,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -934,6 +935,105 @@ export default function TransactionVerification() {
             </Stack>
           </Box>
 
+          <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25, p: 1.25 }}>
+            {!records.length ? (
+              <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                {loading ? "Loading records..." : "No pending non-cash transactions found."}
+              </Typography>
+            ) : (
+              records.map((record) => {
+                const draft = verifiedDrafts[record._id];
+                const analysis = pdfAnalysis[record._id];
+                const isSelected = Boolean(draft);
+                const isPdfMatched = draft?.method === "PDF";
+                const hasAmountMismatch = analysis?.status === "amount_mismatch";
+                const rowComment = draft?.comment || analysis?.comment || record.VerificationComment || "";
+
+                return (
+                  <Paper
+                    key={record._id}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 3,
+                      border: "1px solid #dbe4ee",
+                      backgroundColor: isPdfMatched
+                        ? "rgba(34, 197, 94, 0.10)"
+                        : hasAmountMismatch
+                          ? "rgba(249, 115, 22, 0.10)"
+                          : isSelected
+                            ? "rgba(59, 130, 246, 0.08)"
+                            : "#fff"
+                    }}
+                  >
+                    <Stack spacing={1}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 800, color: "#0f172a", wordBreak: "break-word" }}>
+                            {record.ClientName || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem", wordBreak: "break-word" }}>
+                            {record.AccountName || record.AccountNumber || "-"}
+                          </Typography>
+                        </Box>
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={(event) => handleToggleRecord(record, event.target.checked)}
+                        />
+                      </Stack>
+                      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>METHOD</Typography>
+                          <Typography sx={{ fontWeight: 800 }}>{record.VerificationMethod || record.PaymentMethod || "-"}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
+                          <Typography sx={{ fontWeight: 800 }}>{formatCurrency(record.VerificationAmount ?? record.TotalAmount)}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>REFERENCE</Typography>
+                          <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{record.VerificationReference || record.MOPRef || record.MatchReference || "-"}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>RECEIVER</Typography>
+                          <Typography sx={{ fontWeight: 800 }}>{record.VerificationReceiverLast4 || record.ReceiverLast4 || record.GCashReceiverLast4 || "-"}</Typography>
+                        </Box>
+                      </Box>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                        {record.ReceiptImage ? (
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() => handleOpenReceiptPreview(record.ReceiptImage)}
+                            sx={{ textTransform: "none", fontWeight: 800, minWidth: 0, px: 0 }}
+                          >
+                            View Image
+                          </Button>
+                        ) : (
+                          <Typography sx={{ color: "#64748b", fontSize: "0.72rem" }}>No image</Typography>
+                        )}
+                        {isPdfMatched ? (
+                          <Chip size="small" color="success" label="Matched" />
+                        ) : hasAmountMismatch ? (
+                          <Chip size="small" color="warning" label="Mismatch" />
+                        ) : isSelected ? (
+                          <Chip size="small" color="info" label="Manual" />
+                        ) : (
+                          <Chip size="small" variant="outlined" label="Pending" />
+                        )}
+                      </Stack>
+                      {rowComment ? (
+                        <Typography sx={{ color: hasAmountMismatch ? "#c2410c" : "#475569", fontSize: "0.72rem", whiteSpace: "pre-wrap" }}>
+                          {rowComment}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Paper>
+                );
+              })
+            )}
+          </Box>
+
+          <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -1032,6 +1132,7 @@ export default function TransactionVerification() {
               )}
             </TableBody>
           </Table>
+          </TableContainer>
         </Paper>
       </Stack>
 

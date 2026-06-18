@@ -491,7 +491,101 @@ export default function DashboardPage() {
           ) : listRows.length === 0 ? (
             <Alert severity="info">{listEmptyMessage || "No client found."}</Alert>
           ) : (
-            <Box sx={{ overflowX: "auto" }}>
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {listRows.map((row) => {
+                if (listDialogType === "expense") {
+                  return (
+                    <Card key={`mobile-${row.rowId || row.invoice || row.name}`} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.name || "-"}</Typography>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>{row.type || "-"}</Typography>
+                            </Box>
+                            <Typography sx={{ fontWeight: 900 }}>{formatCurrency(row.amount)}</Typography>
+                          </Stack>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Date: {row.logDate || (row.transactionDate ? new Date(row.transactionDate).toLocaleDateString("en-PH") : "-")}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Invoice: {row.invoice || "-"} | Docs: {row.docs || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            In Charge: {row.inCharge || "-"}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+
+                if (listDialogType === "collection") {
+                  return (
+                    <Card key={`mobile-${row.rowId || row.receiptNumber || row.reference}`} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.accountName || "-"}</Typography>
+                              <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>{row.clientName || "-"}</Typography>
+                            </Box>
+                            <Typography sx={{ fontWeight: 900 }}>{formatCurrency(row.amount)}</Typography>
+                          </Stack>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                            {row.transactionDate ? new Date(row.transactionDate).toLocaleString("en-PH") : "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            {row.method || "-"} | Ref: {row.reference || "-"}
+                          </Typography>
+                          <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                            Receipt: {row.receiptNumber || "-"} | Created by: {row.createdBy || "-"}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+
+                return (
+                  <Card key={`mobile-${row.clientId || `${row.accountName}-${row.disconnectDate}`}`} sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}>
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.accountName || "-"}</Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>{row.clientName || "-"}</Typography>
+                          </Box>
+                          <Typography sx={{ fontWeight: 900, color: "#b91c1c" }}>{Number(row.daysPastDue || 0)}d</Typography>
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.dueDate || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatCurrency(row.amountDue)}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          {row.authMode || "-"} | {row.mikrotikPlan || "-"} | Disconnect: {row.disconnectDate || "-"}
+                        </Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Contact: {row.contactNumber || "-"}
+                        </Typography>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          {row.address || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </Box>
+
+            <Box sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
               {listDialogType === "expense" ? (
                 <Table size="small" sx={{ minWidth: 860 }}>
                   <TableHead>
@@ -593,6 +687,7 @@ export default function DashboardPage() {
                 </Table>
               )}
             </Box>
+            </>
           )}
         </DialogContent>
       </Dialog>

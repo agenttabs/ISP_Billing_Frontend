@@ -7,9 +7,11 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography
@@ -98,6 +100,54 @@ export default function ClientPaymentHistory() {
               <CircularProgress />
             </Box>
           ) : (
+            <>
+            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
+              {rows.length === 0 ? (
+                <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
+                  No payment history found.
+                </Typography>
+              ) : (
+                rows.map((row) => (
+                  <Card
+                    key={row._id || `${row.Invoice}-${row.TransactionDate}`}
+                    sx={{ borderRadius: 3, border: "1px solid #dbe4ee" }}
+                  >
+                    <CardContent>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>
+                              {row.Invoice || "-"}
+                            </Typography>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
+                              {row.TransactionDate ? new Date(row.TransactionDate).toLocaleString("en-PH") : "-"}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontWeight: 900, color: "#15803d", flexShrink: 0 }}>
+                            {formatMoney(row.TotalAmount || row.Cash)}
+                          </Typography>
+                        </Stack>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>TYPE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{row.Type || row.MOP || "-"}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>BALANCE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatMoney(row.Balance)}</Typography>
+                          </Box>
+                        </Box>
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
+                          Created by: {row.CreatedBy || row.CreatedById || "-"}
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </Box>
+
+            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
             <Table>
               <TableHead>
                 <TableRow>
@@ -134,6 +184,8 @@ export default function ClientPaymentHistory() {
                 )}
               </TableBody>
             </Table>
+            </TableContainer>
+            </>
           )}
         </CardContent>
       </Card>
