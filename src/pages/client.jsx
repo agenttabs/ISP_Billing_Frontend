@@ -2913,7 +2913,8 @@ function ClientList() {
     setAdjustDueDateDialog({
       open: false,
       value: null,
-      row: null
+      row: null,
+      client: null
     });
   };
 
@@ -2940,6 +2941,7 @@ function ClientList() {
       setAdjustDueDateDialog({
         open: true,
         row: deleteHistoryDialog.row,
+        client: selectedClient,
         value: selectedClient?.DueDate ? dayjs(selectedClient.DueDate) : dayjs()
       });
       handleCloseDeleteHistoryDialog();
@@ -2954,7 +2956,9 @@ function ClientList() {
   };
 
   const handleSaveAdjustedDueDate = async () => {
-    if (!selectedClient?._id || !adjustDueDateDialog.value) {
+    const adjustClient = adjustDueDateDialog.client || selectedClient;
+
+    if (!adjustClient?._id || !adjustDueDateDialog.value) {
       showMessage("Due Date Required", "Please choose a due date before saving.", "warning");
       return;
     }
@@ -2963,7 +2967,7 @@ function ClientList() {
       const dueDateValue = adjustDueDateDialog.value.toDate();
       const subscriptionCover = String(dueDateValue.getDate());
 
-      await API.put(`/clients/${selectedClient._id}/due-date`, {
+      await API.put(`/clients/${adjustClient._id}/due-date`, {
         DueDate: dueDateValue.toISOString(),
         SubscriptionCover: subscriptionCover
       });
@@ -2972,11 +2976,11 @@ function ClientList() {
       try {
         const { data } = await API.post("/sms/send-payment-correction", {
           client: {
-            ClientName: selectedClient.ClientName || selectedClient.AccountName || "",
-            AccountName: selectedClient.AccountName || "",
-            AccountNumber: selectedClient.AccountNumber || "",
-            ContactNumber: selectedClient.ContactNumber || "",
-            AmountDue: selectedClient.AmountDue || 0,
+            ClientName: adjustClient.ClientName || adjustClient.AccountName || "",
+            AccountName: adjustClient.AccountName || "",
+            AccountNumber: adjustClient.AccountNumber || "",
+            ContactNumber: adjustClient.ContactNumber || "",
+            AmountDue: adjustClient.AmountDue || 0,
             SubscriptionCover: subscriptionCover
           },
           dueDate: dueDateValue.toISOString(),
@@ -2992,7 +2996,7 @@ function ClientList() {
       }
 
       setSelectedClient((prev) =>
-        prev
+        prev && String(prev._id || "") === String(adjustClient._id || "")
           ? {
               ...prev,
               DueDate: dueDateValue.toISOString(),
