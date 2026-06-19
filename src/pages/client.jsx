@@ -4221,7 +4221,7 @@ function ClientList() {
         .toUpperCase();
       const overdueDays = getClientOverdueDays(selectedClient);
 
-      if (overdueDays > disconnectAfterDueDays) {
+      if (!isAdminUser && overdueDays > disconnectAfterDueDays) {
         showMessage(
           "Update Not Allowed",
           `You can't update this client because the due date is already more than ${disconnectAfterDueDays} days overdue. Need to pay first before updating the client.`,
