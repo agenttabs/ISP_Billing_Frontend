@@ -4188,9 +4188,16 @@ function ClientList() {
 
   const handleUpdateClient = async () => {
     const selectedClientId = String(selectedClient?._id || "");
+    const formClientId = String(newClient?._id || "");
     const expectedClientId = String(clientRouteId || selectedClientId || "");
 
-    if (clientFormLoading || !selectedClientId || selectedClientId !== expectedClientId) {
+    if (
+      clientFormLoading ||
+      !selectedClientId ||
+      !formClientId ||
+      selectedClientId !== expectedClientId ||
+      formClientId !== expectedClientId
+    ) {
       showMessage(
         "Client Still Loading",
         "Please wait until the selected client details are fully loaded before saving.",
@@ -4234,6 +4241,7 @@ function ClientList() {
 
         const payload = {
           ...newClient,
+          _id: expectedClientId,
           SubscriptionCover: newClient.SubscriptionCover || "UN-GROUPED",
           Email: emailValue || "N/A",
           EmailBillingEnabled: canEnableEmailBilling
