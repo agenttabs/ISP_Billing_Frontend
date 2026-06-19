@@ -4745,6 +4745,7 @@ function ClientList() {
       showMessage("No Client Selected", "Please select a client first.", "warning");
       return;
     }
+    const paymentClient = selectedClient;
 
     if (!paymentForm.Invoice.trim()) {
       showMessage("Missing Invoice", "Please enter invoice number.", "warning");
@@ -4898,21 +4899,21 @@ function ClientList() {
         }
 
       const balance = totalAmountToPay - amountPaid;
-      const existingNote = selectedClient.Note ? `${selectedClient.Note}\n` : "";
+      const existingNote = paymentClient.Note ? `${paymentClient.Note}\n` : "";
       const paymentNote = paymentForm.Notes
         ? `${existingNote}Payment ${paymentForm.PaymentDate}: ${paymentForm.Notes}`
-        : selectedClient.Note || "";
+        : paymentClient.Note || "";
       const transactionDateTime = new Date();
         const billingAnchorDay =
           resolveBillingAnchorDay(
-            selectedClient?.DueDate || paymentForm.PaymentDate,
-            selectedClient?.SubscriptionCover || paymentForm.SubscriptionCover,
+            paymentClient?.DueDate || paymentForm.PaymentDate,
+            paymentClient?.SubscriptionCover || paymentForm.SubscriptionCover,
             paymentRequiresReconnectFlow
           ) ||
           null;
         const nextDueDateDate =
           calculatedNextDueDate ||
-          addOneMonthToDate(selectedClient.DueDate, billingAnchorDay) ||
+          addOneMonthToDate(paymentClient.DueDate, billingAnchorDay) ||
           addOneMonthToDate(paymentForm.PaymentDate, billingAnchorDay) ||
           transactionDateTime;
         const nextDueDateIso = nextDueDateDate.toISOString();
@@ -4930,23 +4931,23 @@ function ClientList() {
       const transactionYearValue = String(transactionDateTime.getFullYear());
       const reconnectPlanNetPlan =
         getPlanSpeed(reconnectPlan) ||
-        (isDisconnectedPlanValue(selectedClient.PreviousNetPlan)
+        (isDisconnectedPlanValue(paymentClient.PreviousNetPlan)
           ? ""
-          : selectedClient.PreviousNetPlan) ||
+          : paymentClient.PreviousNetPlan) ||
         getPlanName(reconnectPlan) ||
-        selectedClient.NetPlan ||
+        paymentClient.NetPlan ||
         "";
-      const transactionNetPlan = reconnectPlan ? reconnectPlanNetPlan : selectedClient.NetPlan || "";
+      const transactionNetPlan = reconnectPlan ? reconnectPlanNetPlan : paymentClient.NetPlan || "";
 
       const transactionPayload = {
-        ClientId: selectedClient._id,
-        AccountName: selectedClient.AccountName || "",
-        AccountNumber: selectedClient.AccountNumber || "",
-        ClientName: selectedClient.ClientName || "",
-        Address: selectedClient.Address || "",
-        ConnectionType: selectedClient.ConnectionType || "FIBER OPTIC",
+        ClientId: paymentClient._id,
+        AccountName: paymentClient.AccountName || "",
+        AccountNumber: paymentClient.AccountNumber || "",
+        ClientName: paymentClient.ClientName || "",
+        Address: paymentClient.Address || "",
+        ConnectionType: paymentClient.ConnectionType || "FIBER OPTIC",
         NetPlan: transactionNetPlan,
-        ServerLocation: selectedClient.ServerLocation || "",
+        ServerLocation: paymentClient.ServerLocation || "",
         Type: "Payment",
         PaymentMethod: topLevelPaymentMethod,
         MOP: topLevelPaymentMethod,
@@ -4974,11 +4975,11 @@ function ClientList() {
         Promo: "",
         PromoPrice: 0,
         TransactionDate: transactionDateTime,
-        DueDate: selectedClient.DueDate || null,
+        DueDate: paymentClient.DueDate || null,
         NextDueDate: nextDueDateIso,
         PaymentDate: paymentForm.PaymentDate,
         DcDate: null,
-        Cover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
+        Cover: subscriptionCoveredText || paymentClient.SubscriptionCover || "",
         IsReconnectPayment: Boolean(reconnectPlan),
         ReconnectedAt: reconnectPlan ? transactionDateTime : null,
         ReconnectDueDate: reconnectPlan ? nextDueDateIso : null,
@@ -4998,9 +4999,9 @@ function ClientList() {
         normalizedPaymentEntries.map((entry) =>
           API.post("/earnings", {
             PrintId: createdTransactionId,
-            AccountName: selectedClient.AccountName || "",
-            AccountNumber: selectedClient.AccountNumber || "",
-            ClientName: selectedClient.ClientName || "",
+            AccountName: paymentClient.AccountName || "",
+            AccountNumber: paymentClient.AccountNumber || "",
+            ClientName: paymentClient.ClientName || "",
             Invoice: salesInvoiceNumber,
             PaymentReceipt: paymentReceiptNumber,
             Item: "ISP-Client Payment",
@@ -5041,33 +5042,33 @@ function ClientList() {
         normalizedPaymentEntries.every((entry) => entry.method !== "CASH");
 
       await API.put(
-        `/clients/${selectedClient._id}`,
+        `/clients/${paymentClient._id}`,
         {
-          ...selectedClient,
+          ...paymentClient,
           ContactNumber: paymentForm.ContactNumber,
           AuthenticationMode: reconnectPlan
-            ? paymentSelectedAuthMode || selectedClient.AuthenticationMode
-            : selectedClient.AuthenticationMode,
+            ? paymentSelectedAuthMode || paymentClient.AuthenticationMode
+            : paymentClient.AuthenticationMode,
           Profile: reconnectPlan
             ? paymentSelectedAuthMode === "PPPOE"
-              ? selectedClient.PreviousProfile || getPlanName(reconnectPlan) || selectedClient.Profile
-              : getPlanName(reconnectPlan) || selectedClient.Profile
-            : selectedClient.Profile,
+              ? paymentClient.PreviousProfile || getPlanName(reconnectPlan) || paymentClient.Profile
+              : getPlanName(reconnectPlan) || paymentClient.Profile
+            : paymentClient.Profile,
           NetPlan: reconnectPlan
-            ? selectedClient.PreviousNetPlan || getPlanSpeed(reconnectPlan) || getPlanName(reconnectPlan) || selectedClient.NetPlan
-            : selectedClient.NetPlan,
-          AmountDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
-          Status: reconnectPlan ? "ACTIVE" : selectedClient.Status,
+            ? paymentClient.PreviousNetPlan || getPlanSpeed(reconnectPlan) || getPlanName(reconnectPlan) || paymentClient.NetPlan
+            : paymentClient.NetPlan,
+          AmountDue: reconnectPlan ? getPlanPrice(reconnectPlan) : paymentClient.AmountDue,
+          Status: reconnectPlan ? "ACTIVE" : paymentClient.Status,
           MacAddress:
             reconnectPlan
               ? paymentSelectedAuthMode === "IPOE"
                 ? paymentReconnectMacAddress
                 : ""
-              : selectedClient.MacAddress,
-          PreviousAuthenticationMode: reconnectPlan ? "" : selectedClient.PreviousAuthenticationMode,
-          PreviousProfile: reconnectPlan ? "" : selectedClient.PreviousProfile,
-          PreviousNetPlan: reconnectPlan ? "" : selectedClient.PreviousNetPlan,
-          PreviousMacAddress: reconnectPlan ? "" : selectedClient.PreviousMacAddress,
+              : paymentClient.MacAddress,
+          PreviousAuthenticationMode: reconnectPlan ? "" : paymentClient.PreviousAuthenticationMode,
+          PreviousProfile: reconnectPlan ? "" : paymentClient.PreviousProfile,
+          PreviousNetPlan: reconnectPlan ? "" : paymentClient.PreviousNetPlan,
+          PreviousMacAddress: reconnectPlan ? "" : paymentClient.PreviousMacAddress,
           AmountPaid: amountPaid,
           CashAmount: cashPaymentAmount,
           GCashAmount: gcashPaymentAmount,
@@ -5078,18 +5079,18 @@ function ClientList() {
           PaymentStatus: balance <= 0 ? "PAID" : "PARTIAL",
           DueDate: nextDueDateIso,
           SubscriptionCover: nextSubscriptionCover,
-          LastReconnectedAt: reconnectPlan ? transactionDateTime.toISOString() : selectedClient.LastReconnectedAt,
-          LastReconnectDueDate: reconnectPlan ? nextDueDateIso : selectedClient.LastReconnectDueDate,
+          LastReconnectedAt: reconnectPlan ? transactionDateTime.toISOString() : paymentClient.LastReconnectedAt,
+          LastReconnectDueDate: reconnectPlan ? nextDueDateIso : paymentClient.LastReconnectDueDate,
           Note: paymentNote
         }
       );
 
       await loadClients();
       const receiptPayload = {
-        clientName: selectedClient.ClientName || "",
-        accountName: selectedClient.AccountName || "",
-        planAmount: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
-        contactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || "",
+        clientName: paymentClient.ClientName || "",
+        accountName: paymentClient.AccountName || "",
+        planAmount: reconnectPlan ? getPlanPrice(reconnectPlan) : paymentClient.AmountDue,
+        contactNumber: paymentForm.ContactNumber || paymentClient.ContactNumber || "",
         paymentReceipt: paymentReceiptNumber,
         salesInvoice: salesInvoiceNumber,
         paymentDate: new Date(transactionDateTime).toLocaleString("en-PH"),
@@ -5097,7 +5098,7 @@ function ClientList() {
         reference: topLevelPaymentReference,
         amountPaid,
         paymentBreakdown,
-        subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "-",
+        subscriptionCover: subscriptionCoveredText || paymentClient.SubscriptionCover || "-",
         nextDueDate: nextDueDateIso,
         NextDueDate: nextDueDateIso,
         additionalCharge,
@@ -5124,14 +5125,14 @@ function ClientList() {
         try {
           const { data: smsResult } = await API.post("/sms/send-payment-received", {
             client: {
-              ClientName: selectedClient.ClientName || "",
-              AccountName: selectedClient.AccountName || "",
-              AccountNumber: selectedClient.AccountNumber || "",
-              ContactNumber: paymentForm.ContactNumber || selectedClient.ContactNumber || ""
+              ClientName: paymentClient.ClientName || "",
+              AccountName: paymentClient.AccountName || "",
+              AccountNumber: paymentClient.AccountNumber || "",
+              ContactNumber: paymentForm.ContactNumber || paymentClient.ContactNumber || ""
             },
             amountPaid,
-            monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : selectedClient.AmountDue,
-            subscriptionCover: subscriptionCoveredText || selectedClient.SubscriptionCover || "",
+            monthlyDue: reconnectPlan ? getPlanPrice(reconnectPlan) : paymentClient.AmountDue,
+            subscriptionCover: subscriptionCoveredText || paymentClient.SubscriptionCover || "",
             nextDueDate: nextDueDateIso
           });
 
