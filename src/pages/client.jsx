@@ -1907,6 +1907,7 @@ function ClientList() {
 
   const [menu, setMenu] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [clientFormLoading, setClientFormLoading] = useState(false);
 
   const [openModal, setOpenModal] = useState(false);
   const [openPaymentModal, setOpenPaymentModal] = useState(false);
@@ -2155,15 +2156,20 @@ function ClientList() {
       setOpenModal(false);
       setEditMode(false);
       setSelectedClient(null);
+      setClientFormLoading(false);
       setNewClient(getDefaultNewClientForm());
       return;
     }
 
     if (!isClientEditPage || !clientRouteId) {
+      setClientFormLoading(false);
       return;
     }
 
     let isMounted = true;
+    setClientFormLoading(true);
+    setSelectedClient(null);
+    setNewClient(getDefaultNewClientForm());
 
     const loadClientForEdit = async () => {
       try {
@@ -2185,6 +2191,10 @@ function ClientList() {
           "error"
         );
         navigateToClientList();
+      } finally {
+        if (isMounted) {
+          setClientFormLoading(false);
+        }
       }
     };
 
@@ -4177,6 +4187,18 @@ function ClientList() {
   };
 
   const handleUpdateClient = async () => {
+    const selectedClientId = String(selectedClient?._id || "");
+    const expectedClientId = String(clientRouteId || selectedClientId || "");
+
+    if (clientFormLoading || !selectedClientId || selectedClientId !== expectedClientId) {
+      showMessage(
+        "Client Still Loading",
+        "Please wait until the selected client details are fully loaded before saving.",
+        "warning"
+      );
+      return;
+    }
+
     if (emailError) {
       showMessage("Invalid Email", "Please enter a valid email address.", "warning");
       return;
@@ -4234,7 +4256,7 @@ function ClientList() {
       delete payload.createdAt;
 
       await API.put(
-        `/clients/${selectedClient._id}`,
+        `/clients/${expectedClientId}`,
         payload
       );
 
@@ -5635,6 +5657,7 @@ function ClientList() {
       <Button
         variant="contained"
         onClick={editMode ? handleUpdateClient : handleAddClient}
+        disabled={editMode && clientFormLoading}
         sx={{
           px: 3.25,
           py: 0.85,
@@ -5644,7 +5667,7 @@ function ClientList() {
           boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
         }}
       >
-        Save Client
+        {editMode && clientFormLoading ? "Loading Client..." : "Save Client"}
       </Button>
     </Box>
   );
@@ -6712,6 +6735,7 @@ function ClientList() {
           <Button
             variant="contained"
             onClick={editMode ? handleUpdateClient : handleAddClient}
+            disabled={editMode && clientFormLoading}
             sx={{
               px: 3.25,
               py: 0.85,
@@ -6721,7 +6745,7 @@ function ClientList() {
               boxShadow: "0 10px 22px rgba(37, 99, 235, 0.18)"
             }}
           >
-            Save Client
+            {editMode && clientFormLoading ? "Loading Client..." : "Save Client"}
           </Button>
         </DialogActions>
       </Dialog>
