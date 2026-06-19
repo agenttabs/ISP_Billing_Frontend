@@ -131,6 +131,9 @@ function App() {
             <Route path="/nap" element={<NapLocation />} />
             <Route path="/reports/tech-report" element={<TechReport />} />
             <Route path="/repair-information" element={<RepairInformation />} />
+          </Route>
+
+          <Route element={<RoleRoute allowedRoles={["ADMIN", "CASHIER", "TECHNICIAN"]} />}>
             <Route path="/installation" element={<Installation />} />
           </Route>
         </Route>
