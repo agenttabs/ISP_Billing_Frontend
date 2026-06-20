@@ -4242,6 +4242,7 @@ function ClientList() {
         const payload = {
           ...newClient,
           _id: expectedClientId,
+          ForcePppoeSecretUpdate: true,
           SubscriptionCover: newClient.SubscriptionCover || "UN-GROUPED",
           Email: emailValue || "N/A",
           EmailBillingEnabled: canEnableEmailBilling
