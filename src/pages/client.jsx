@@ -2979,7 +2979,8 @@ function ClientList() {
 
       await API.put(`/clients/${adjustClient._id}/due-date`, {
         DueDate: dueDateValue.toISOString(),
-        SubscriptionCover: subscriptionCover
+        SubscriptionCover: subscriptionCover,
+        SchedulePastDueOneHour: true
       });
 
       let correctionSmsResult = null;

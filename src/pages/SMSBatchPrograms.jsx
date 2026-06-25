@@ -72,6 +72,7 @@ export default function SMSBatchPrograms() {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [recipientRows, setRecipientRows] = useState([]);
   const [recipientCount, setRecipientCount] = useState(0);
+  const [recipientTargetDueDate, setRecipientTargetDueDate] = useState("");
 
   const formatDateTime = (value) => {
     if (!value) return "-";
@@ -80,6 +81,31 @@ export default function SMSBatchPrograms() {
     if (Number.isNaN(date.getTime())) return "-";
 
     return date.toLocaleString("en-PH");
+  };
+
+  const getOffsetTargetDueDate = (daysOffset = 0) => {
+    const date = new Date();
+    date.setDate(date.getDate() + Number(daysOffset || 0));
+    return date;
+  };
+
+  const formatOffsetTargetDueDate = (daysOffset = 0) =>
+    getOffsetTargetDueDate(daysOffset).toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+
+  const formatDateKey = (value) => {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return "";
+
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return date.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
   };
 
   const loadPrograms = async () => {
@@ -171,9 +197,11 @@ export default function SMSBatchPrograms() {
       const rows = data?.recipients || [];
       setRecipientRows(rows);
       setRecipientCount(Number(data?.totalRecipients ?? rows.length));
+      setRecipientTargetDueDate(String(data?.targetDueDate || ""));
       setError("");
     } catch (err) {
       setRecipientRows([]);
+      setRecipientTargetDueDate("");
       setSuccess("");
       setError(err.response?.data?.error || "Failed to load batch recipient list.");
     } finally {
@@ -186,6 +214,7 @@ export default function SMSBatchPrograms() {
     setSelectedProgram(null);
     setRecipientRows([]);
     setRecipientCount(0);
+    setRecipientTargetDueDate("");
     setViewLoading(false);
   };
 
@@ -294,7 +323,7 @@ export default function SMSBatchPrograms() {
                     }))
                   }
                   fullWidth
-                  helperText="0 = due today, -1 = one day before due, 1 = one day after due."
+                  helperText="-1 = due yesterday, 0 = due today, 1 = due tomorrow."
                 />
 
                 <TextField
@@ -311,6 +340,27 @@ export default function SMSBatchPrograms() {
                   required
                   InputLabelProps={{ shrink: true }}
                 />
+
+                <Box
+                  sx={{
+                    minWidth: { xs: "100%", md: 220 },
+                    px: 1.5,
+                    py: 1,
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 2,
+                    backgroundColor: "#eff6ff",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Typography sx={{ fontSize: "0.72rem", fontWeight: 800, color: "#1e40af" }}>
+                    TARGET DUE DATE
+                  </Typography>
+                  <Typography sx={{ fontWeight: 900, color: "#0f172a" }}>
+                    {formatOffsetTargetDueDate(form.DaysOffset)}
+                  </Typography>
+                </Box>
 
                 <Box
                   sx={{
@@ -441,9 +491,13 @@ export default function SMSBatchPrograms() {
                             <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>OFFSET</Typography>
                             <Typography sx={{ fontWeight: 800 }}>{program.DaysOffset}</Typography>
                           </Box>
+                          <Box>
+                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>TARGET DUE</Typography>
+                            <Typography sx={{ fontWeight: 800 }}>{formatOffsetTargetDueDate(program.DaysOffset)}</Typography>
+                          </Box>
                         </Box>
-                        <Typography sx={{ color: program.LastError ? "#b91c1c" : "#64748b", fontSize: "0.75rem", fontWeight: program.LastError ? 800 : 500, wordBreak: "break-word" }}>
-                          {program.LastError || program.LastRunSummary || "No run history yet."}
+                        <Typography sx={{ color: "#64748b", fontSize: "0.75rem", fontWeight: 500, wordBreak: "break-word" }}>
+                          {program.LastRunSummary || "No run history yet."}
                         </Typography>
                         <Typography sx={{ whiteSpace: "pre-wrap", color: "#64748b", fontSize: "0.72rem" }}>
                           {program.Body || "-"}
@@ -493,6 +547,7 @@ export default function SMSBatchPrograms() {
                   <TableCell>Template</TableCell>
                   <TableCell>Rule</TableCell>
                   <TableCell>Offset</TableCell>
+                  <TableCell>Target Due Date</TableCell>
                   <TableCell>Send Time</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Last Run</TableCell>
@@ -504,7 +559,7 @@ export default function SMSBatchPrograms() {
               <TableBody>
                 {programs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={11} align="center">
                       No SMS batch programs found.
                     </TableCell>
                   </TableRow>
@@ -515,6 +570,9 @@ export default function SMSBatchPrograms() {
                       <TableCell>{program.TemplateType || "-"}</TableCell>
                       <TableCell>{program.RecipientRule}</TableCell>
                       <TableCell>{program.DaysOffset}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        {formatOffsetTargetDueDate(program.DaysOffset)}
+                      </TableCell>
                       <TableCell>{program.SendTime}</TableCell>
                       <TableCell>
                         <Chip
@@ -528,11 +586,11 @@ export default function SMSBatchPrograms() {
                         <Typography
                           sx={{
                             maxWidth: 260,
-                            color: program.LastError ? "#b91c1c" : "#475569",
-                            fontWeight: program.LastError ? 700 : 500
+                            color: "#475569",
+                            fontWeight: 500
                           }}
                         >
-                          {program.LastError || program.LastRunSummary || "No run history yet."}
+                          {program.LastRunSummary || "No run history yet."}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -599,6 +657,15 @@ export default function SMSBatchPrograms() {
             <Typography sx={{ color: "#475569" }}>
               This shows the clients that match the current batch rule for today.
             </Typography>
+            {selectedProgram ? (
+              <Alert severity="info">
+                Offset {Number(selectedProgram.DaysOffset || 0)} will send to clients with due date{" "}
+                <strong>
+                  {formatDateKey(recipientTargetDueDate) ||
+                    formatOffsetTargetDueDate(selectedProgram.DaysOffset)}
+                </strong>.
+              </Alert>
+            ) : null}
 
             {viewLoading ? (
               <Typography>Loading recipients...</Typography>
@@ -628,7 +695,7 @@ export default function SMSBatchPrograms() {
                             Contact: {row.ContactNumber || "-"}
                           </Typography>
                           <Typography sx={{ color: "#64748b", fontSize: "0.75rem" }}>
-                            Due: {formatDateTime(row.DueDate)} | {row.PaymentStatus || "-"}
+                            Due: {formatDateTime(row.DueDate)}
                           </Typography>
                           <Typography sx={{ fontWeight: 800 }}>
                             {Number(row.AmountDue || 0).toLocaleString("en-PH", {
@@ -652,14 +719,13 @@ export default function SMSBatchPrograms() {
                       <TableCell>Contact Number</TableCell>
                       <TableCell>Due Date</TableCell>
                       <TableCell>Amount Due</TableCell>
-                      <TableCell>Payment Status</TableCell>
                       <TableCell>Net Plan</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {recipientRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} align="center">
+                        <TableCell colSpan={7} align="center">
                           No recipients found for this batch today.
                         </TableCell>
                       </TableRow>
@@ -677,7 +743,6 @@ export default function SMSBatchPrograms() {
                               maximumFractionDigits: 2
                             })}
                           </TableCell>
-                          <TableCell>{row.PaymentStatus}</TableCell>
                           <TableCell>{row.NetPlan}</TableCell>
                         </TableRow>
                       ))
