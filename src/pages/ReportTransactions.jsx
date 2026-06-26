@@ -5,7 +5,9 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   CircularProgress,
+  FormControlLabel,
   Stack,
   Table,
   TableBody,
@@ -36,6 +38,10 @@ export default function ReportTransactions() {
     endDate: isCashier ? getTodayIsoDate() : ""
   }));
   const [searchText, setSearchText] = useState("");
+  const [paymentFilters, setPaymentFilters] = useState({
+    cash: true,
+    nonCash: true
+  });
   const shouldWaitForAdminDateRange =
     !isCashier && (!filters.startDate || !filters.endDate);
 
@@ -51,16 +57,36 @@ export default function ReportTransactions() {
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = String(searchText || "").trim().toLowerCase();
-
-    if (!normalizedSearch) {
-      return rows;
-    }
+    const includeCash = Boolean(paymentFilters.cash);
+    const includeNonCash = Boolean(paymentFilters.nonCash);
 
     return rows.filter((row) => {
+      const method = String(row.MOP || row.Type || "").trim().toUpperCase();
+      const isCashPayment = method === "CASH";
+
+      if (isCashPayment && !includeCash) {
+        return false;
+      }
+
+      if (!isCashPayment && !includeNonCash) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
       const accountName = String(row.AccountName || "").toLowerCase();
       return accountName.includes(normalizedSearch);
     });
-  }, [rows, searchText]);
+  }, [paymentFilters.cash, paymentFilters.nonCash, rows, searchText]);
+
+  const handlePaymentFilterChange = (name, checked) => {
+    setPaymentFilters((prev) => ({
+      ...prev,
+      [name]: checked
+    }));
+  };
 
   const totalCollection = useMemo(
     () =>
@@ -201,6 +227,26 @@ export default function ReportTransactions() {
               placeholder="Type account name"
               sx={{ minWidth: { xs: "100%", md: 260 } }}
             />
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={paymentFilters.cash}
+                    onChange={(event) => handlePaymentFilterChange("cash", event.target.checked)}
+                  />
+                }
+                label="Cash"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={paymentFilters.nonCash}
+                    onChange={(event) => handlePaymentFilterChange("nonCash", event.target.checked)}
+                  />
+                }
+                label="Non-cash"
+              />
+            </Stack>
             {!isCashier ? (
               <Button
                 variant="outlined"
