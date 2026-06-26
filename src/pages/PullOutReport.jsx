@@ -18,18 +18,16 @@ import {
 } from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import dayjs from "dayjs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 import { DEFAULT_COMPANY_NAME, fetchSystemCompanyName } from "../utils/companyName";
-
-const formatMoney = (value) =>
-  `PHP ${Number(value || 0).toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -47,30 +45,40 @@ const formatDate = (value) => {
 export default function PullOutReport() {
   const [days, setDays] = useState(30);
   const [appliedDays, setAppliedDays] = useState(30);
+  const [asOfDate, setAsOfDate] = useState(dayjs());
+  const [appliedAsOfDate, setAppliedAsOfDate] = useState(dayjs());
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [companyName, setCompanyName] = useState(DEFAULT_COMPANY_NAME);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const totalAmount = useMemo(
-    () => rows.reduce((sum, row) => sum + Number(row.amountDue || 0), 0),
-    [rows]
+  const appliedTargetDueDate = useMemo(
+    () => appliedAsOfDate.subtract(Number(appliedDays || 0) + 1, "day").format("YYYY-MM-DD"),
+    [appliedAsOfDate, appliedDays]
   );
+  const dueRangeText = `${formatDate(summary?.targetDueDate || appliedTargetDueDate)} to ${formatDate(
+    summary?.asOfDate || appliedAsOfDate
+  )}`;
 
-  const loadReport = async (targetDays = appliedDays) => {
+  const loadReport = async (targetDays = appliedDays, targetAsOfDate = appliedAsOfDate) => {
     try {
       setLoading(true);
       setError("");
 
-      const safeDays = Math.max(0, Math.floor(Number(targetDays) || 0));
+      const safeDays = Math.abs(Math.floor(Number(targetDays) || 0));
+      const safeAsOfDate = targetAsOfDate?.isValid?.() ? targetAsOfDate : dayjs();
       const { data } = await API.get("/reports/pull-out", {
-        params: { days: safeDays }
+        params: {
+          days: safeDays,
+          asOfDate: safeAsOfDate.format("YYYY-MM-DD")
+        }
       });
 
       setRows(data?.rows || []);
       setSummary(data?.summary || null);
       setAppliedDays(safeDays);
+      setAppliedAsOfDate(safeAsOfDate);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to load pull out report.");
     } finally {
@@ -87,7 +95,7 @@ export default function PullOutReport() {
   }, []);
 
   const handleApplyFilter = () => {
-    loadReport(days);
+    loadReport(days, asOfDate);
   };
 
   const handleDownloadPdf = () => {
@@ -96,8 +104,6 @@ export default function PullOutReport() {
       unit: "mm",
       format: "a4"
     });
-    const pageWidth = doc.internal.pageSize.getWidth();
-
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
     doc.text(companyName, 14, 14);
@@ -106,21 +112,17 @@ export default function PullOutReport() {
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.text(`Due date day: ${appliedDays} day(s) overdue and up`, 14, 29);
-    doc.text(`As of: ${formatDate(summary?.asOfDate || new Date())}`, 14, 35);
-    doc.text(`Records: ${rows.length}`, 14, 41);
-    doc.text(`Total Amount Due: ${formatMoney(totalAmount)}`, pageWidth - 70, 41);
+    doc.text(`Pull out date: ${formatDate(summary?.asOfDate || new Date())}`, 14, 29);
+    doc.text(`Due date range: ${dueRangeText}`, 14, 35);
+    doc.text(`Records: ${rows.length}`, 14, 47);
 
     autoTable(doc, {
-      startY: 48,
+      startY: 54,
       head: [[
         "Pull Out",
         "Account",
         "Client",
-        "Auth",
         "Due Date",
-        "Overdue",
-        "Amount",
         "Contact",
         "Address"
       ]],
@@ -128,10 +130,7 @@ export default function PullOutReport() {
         "",
         row.accountName || "-",
         row.clientName || "-",
-        row.authMode || "-",
         formatDate(row.dueDate),
-        `${row.daysPastDue || 0} day(s)`,
-        formatMoney(row.amountDue),
         row.contactNumber || "-",
         row.address || "-"
       ]),
@@ -179,7 +178,7 @@ export default function PullOutReport() {
             <Button
               variant="outlined"
               startIcon={<RefreshOutlinedIcon />}
-              onClick={() => loadReport(appliedDays)}
+              onClick={() => loadReport(appliedDays, appliedAsOfDate)}
               disabled={loading}
             >
               Refresh
@@ -204,10 +203,25 @@ export default function PullOutReport() {
               type="number"
               value={days}
               onChange={(event) => setDays(event.target.value)}
+              onBlur={() => setDays(Math.abs(Math.floor(Number(days) || 0)))}
               inputProps={{ min: 0 }}
-              helperText="Example: 30 means show clients 30 days overdue and up."
+              helperText="Example: 30 with Jun 1 targets May 1."
               sx={{ width: { xs: "100%", md: 220 } }}
             />
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <DatePicker
+                label="Pull Out Date"
+                value={asOfDate}
+                onChange={(value) => setAsOfDate(value || dayjs())}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    helperText: "Selected date used as the pull out date.",
+                    sx: { width: { xs: "100%", md: 240 } }
+                  }
+                }}
+              />
+            </LocalizationProvider>
             <Button variant="contained" onClick={handleApplyFilter} disabled={loading}>
               Apply Filter
             </Button>
@@ -215,8 +229,8 @@ export default function PullOutReport() {
             <Typography variant="body2" sx={{ fontWeight: 700, color: "text.secondary" }}>
               Records: {rows.length}
             </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 800 }}>
-              Total: {formatMoney(totalAmount)}
+            <Typography variant="body2" sx={{ fontWeight: 700, color: "text.secondary" }}>
+              Due Range: {dueRangeText}
             </Typography>
           </Stack>
         </CardContent>
@@ -246,29 +260,14 @@ export default function PullOutReport() {
                           <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.accountName || "-"}</Typography>
                             <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
-                              {row.clientName || "-"} | {row.authMode || "-"}
+                              {row.clientName || "-"}
                             </Typography>
                           </Box>
-                          <Typography sx={{ fontWeight: 900, color: "error.main", flexShrink: 0 }}>
-                            {row.daysPastDue || 0}d
-                          </Typography>
                         </Stack>
                         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75 }}>
                           <Box>
                             <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>DUE DATE</Typography>
                             <Typography sx={{ fontWeight: 800 }}>{formatDate(row.dueDate)}</Typography>
-                          </Box>
-                          <Box>
-                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PULL OUT</Typography>
-                            <Typography sx={{ fontWeight: 800 }}>{formatDate(row.eligibleDate)}</Typography>
-                          </Box>
-                          <Box>
-                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PLAN</Typography>
-                            <Typography sx={{ fontWeight: 800, wordBreak: "break-word" }}>{row.netPlan || "-"}</Typography>
-                          </Box>
-                          <Box>
-                            <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>AMOUNT</Typography>
-                            <Typography sx={{ fontWeight: 900 }}>{formatMoney(row.amountDue)}</Typography>
                           </Box>
                         </Box>
                         <Typography sx={{ color: "#64748b", fontSize: "0.75rem", wordBreak: "break-word" }}>
@@ -290,12 +289,7 @@ export default function PullOutReport() {
                 <TableRow>
                   <TableCell>Account Name</TableCell>
                   <TableCell>Client Name</TableCell>
-                  <TableCell>Auth</TableCell>
-                  <TableCell>Plan</TableCell>
                   <TableCell>Due Date</TableCell>
-                  <TableCell>Pull Out Date</TableCell>
-                  <TableCell>Overdue</TableCell>
-                  <TableCell>Amount</TableCell>
                   <TableCell>Contact</TableCell>
                   <TableCell>Address</TableCell>
                 </TableRow>
@@ -303,7 +297,7 @@ export default function PullOutReport() {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={5} align="center">
                       No pull out candidates found for {appliedDays} day(s) overdue.
                     </TableCell>
                   </TableRow>
@@ -312,16 +306,7 @@ export default function PullOutReport() {
                     <TableRow key={row.clientId || row.accountName}>
                       <TableCell>{row.accountName || "-"}</TableCell>
                       <TableCell>{row.clientName || "-"}</TableCell>
-                      <TableCell>{row.authMode || "-"}</TableCell>
-                      <TableCell>{row.netPlan || "-"}</TableCell>
                       <TableCell>{formatDate(row.dueDate)}</TableCell>
-                      <TableCell>{formatDate(row.eligibleDate)}</TableCell>
-                      <TableCell>
-                        <Box component="span" sx={{ fontWeight: 800, color: "error.main" }}>
-                          {row.daysPastDue || 0} day(s)
-                        </Box>
-                      </TableCell>
-                      <TableCell>{formatMoney(row.amountDue)}</TableCell>
                       <TableCell>{row.contactNumber || "-"}</TableCell>
                       <TableCell>{row.address || "-"}</TableCell>
                     </TableRow>
