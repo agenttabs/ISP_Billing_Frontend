@@ -23,6 +23,7 @@ import MikrotikDcBatch from "./pages/MikrotikDcBatch";
 import NapLocation from "./pages/NapLocation";
 import NetplanMaintenance from "./pages/NetplanMaintenance";
 import OltLookup from "./pages/OltLookup";
+import OltOnuStatus from "./pages/OltOnuStatus";
 import OltDumpScheduler from "./pages/OltDumpScheduler";
 import PrintReceipt from "./pages/PrintReceipt";
 import PullOutReport from "./pages/PullOutReport";
@@ -99,6 +100,7 @@ function App() {
             <Route path="/reports/transactions" element={<ReportTransactions />} />
             <Route path="/expense-input" element={<ExpenseInput />} />
             <Route path="/olt-lookup" element={<OltLookup />} />
+            <Route path="/olt-onu-status" element={<OltOnuStatus />} />
           </Route>
 
           <Route element={<RoleRoute allowedRoles={["ADMIN"]} />}>

@@ -77,6 +77,19 @@ const getPdfTextLines = (doc, value, maxWidth, maxLines = 2) => {
   return visibleLines;
 };
 
+const drawPdfPanel = (doc, x, y, width, height, fill = [255, 255, 255]) => {
+  doc.setFillColor(...fill);
+  doc.setDrawColor(219, 228, 238);
+  doc.roundedRect(x, y, width, height, 1.5, 1.5, "FD");
+};
+
+const drawPdfSectionTitle = (doc, label, x, y) => {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(String(label || "").toUpperCase(), x, y);
+};
+
 const addOneMonthAnchored = (value, preferredDay) => {
   if (!value) return null;
 
@@ -195,7 +208,6 @@ export default function Billing() {
     });
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    const statementTitle = `Billing Statement - ${statementMonth}`;
     const statementCovered =
       statementRange.start && statementRange.end
         ? `${formatDate(statementRange.start)} to ${formatDate(statementRange.end)}`
@@ -208,46 +220,54 @@ export default function Billing() {
       logoDataUrl = "";
     }
 
-    doc.setDrawColor(219, 228, 238);
-    doc.line(14, 34, pageWidth - 14, 34);
-
+    drawPdfPanel(doc, 14, 8, pageWidth - 28, 28, [255, 255, 255]);
     doc.setTextColor(15, 23, 42);
     if (logoDataUrl) {
-      doc.addImage(logoDataUrl, "PNG", 14, 8, 86, 13);
+      doc.addImage(logoDataUrl, "PNG", 22, 12, 82, 13);
     } else {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(20);
-      doc.text(companyName, 18, 14);
+      doc.text(companyName, 22, 20);
     }
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(statementTitle, logoDataUrl ? 112 : 18, logoDataUrl ? 16 : 22);
-
-    doc.setTextColor(15, 23, 42);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("Billed To", 18, 46);
-    doc.text("Account Details", 112, 46);
-
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(client.ClientName || "-", 18, 53);
+    doc.text(statementMonth, pageWidth - 34, 17, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Billing Statement", pageWidth - 34, 24, { align: "right" });
+
     const addressLines = getPdfTextLines(
       doc,
       client.Address || "No address provided",
       82,
       2
     );
-    doc.text(addressLines, 18, 59);
-    doc.text(`Contact: ${client.ContactNumber || "N/A"}`, 18, 70);
+    const infoPanelY = 44;
+    drawPdfPanel(doc, 14, infoPanelY, 88, 36, [248, 251, 255]);
+    drawPdfPanel(doc, 108, infoPanelY, 88, 36, [255, 255, 255]);
 
-    doc.text(`Account Number: ${client.AccountNumber || "-"}`, 112, 53);
-    doc.text(`Plan: ${formatCurrency(client.AmountDue || 0)}`, 112, 59);
-    doc.text(`Due Date: ${formatDate(client.DueDate)}`, 112, 65);
+    drawPdfSectionTitle(doc, "Billed To", 20, infoPanelY + 8);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(client.ClientName || "-", 20, infoPanelY + 15);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(addressLines, 20, infoPanelY + 21);
+    doc.text(`Contact: ${client.ContactNumber || "N/A"}`, 20, infoPanelY + 21 + addressLines.length * 4.5 + 3);
+
+    drawPdfSectionTitle(doc, "Account Details", 114, infoPanelY + 8);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.7);
+    doc.text(`Account Number: ${client.AccountNumber || "-"}`, 114, infoPanelY + 15);
+    doc.text(`Plan: ${Number(client.AmountDue || 0).toLocaleString("en-PH")}`, 114, infoPanelY + 22);
+    doc.text(`Billing Due Date: ${formatDate(client.DueDate)}`, 114, infoPanelY + 29);
 
     autoTable(doc, {
-      startY: 84,
-      head: [["Summary", "Value"]],
+      startY: 90,
       body: [
         ["Monthly Due", formatCurrency(monthlyDue)],
         ["Previous Balance", formatCurrency(previousBalance)],
@@ -255,24 +275,16 @@ export default function Billing() {
         ["Subscription Covered", statementCovered]
       ],
       theme: "grid",
-      styles: {
-        fontSize: 10,
-        cellPadding: 4,
-        textColor: [15, 23, 42]
-      },
-      headStyles: {
-        fillColor: [239, 246, 255],
-        textColor: [15, 23, 42],
-        fontStyle: "bold"
-      },
+      styles: { fontSize: 9.2, cellPadding: 4, textColor: [15, 23, 42], minCellHeight: 12 },
       columnStyles: {
-        0: { cellWidth: 70 },
-        1: { cellWidth: 102 }
-      }
+        0: { cellWidth: 62, fontStyle: "bold", textColor: [100, 116, 139] },
+        1: { cellWidth: 110, fontStyle: "bold" }
+      },
+      margin: { left: 14, right: 14 }
     });
 
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 8,
+      startY: doc.lastAutoTable.finalY + 10,
       head: [["Description", "Amount"]],
       body: [
         ["Monthly internet service fee", formatCurrency(monthlyDue)],
@@ -492,37 +504,27 @@ export default function Billing() {
               </Paper>
             </Stack>
 
-            <Stack
-              direction={{ xs: "column", md: "row" }}
-              spacing={2}
-              sx={{ mb: 4 }}
+            <TableContainer
+              component={Paper}
+              elevation={0}
+              sx={{ borderRadius: 3, border: "1px solid #dbe4ee", mb: 4 }}
             >
-              {[
-                { label: "Monthly Due", value: formatCurrency(monthlyDue) },
-                { label: "Previous Balance", value: formatCurrency(previousBalance) },
-                { label: "Total Amount Due", value: formatCurrency(totalDue) },
-                { label: "Subscription Covered", value: statementRange.start && statementRange.end ? `${formatDate(statementRange.start)} to ${formatDate(statementRange.end)}` : "-" }
-              ].map((item) => (
-                <Paper
-                  key={item.label}
-                  elevation={0}
-                  sx={{
-                    flex: 1,
-                    p: 2.5,
-                    borderRadius: 3,
-                    border: "1px solid #dbe4ee",
-                    bgcolor: "#fcfdff"
-                  }}
-                >
-                  <Typography sx={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 800, letterSpacing: 0.7 }}>
-                    {item.label}
-                  </Typography>
-                  <Typography sx={{ mt: 1, fontSize: "1.15rem", fontWeight: 800, color: "#0f172a" }}>
-                    {item.value}
-                  </Typography>
-                </Paper>
-              ))}
-            </Stack>
+              <Table>
+                <TableBody>
+                  {[
+                    ["Monthly Due", formatCurrency(monthlyDue)],
+                    ["Previous Balance", formatCurrency(previousBalance)],
+                    ["Total Amount Due", formatCurrency(totalDue)],
+                    ["Subscription Covered", statementRange.start && statementRange.end ? `${formatDate(statementRange.start)} to ${formatDate(statementRange.end)}` : "-"]
+                  ].map((row) => (
+                    <TableRow key={row[0]}>
+                      <TableCell sx={{ fontWeight: 800, color: "#64748b", bgcolor: "#fcfdff" }}>{row[0]}</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: "#0f172a" }}>{row[1]}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
             <TableContainer
               component={Paper}

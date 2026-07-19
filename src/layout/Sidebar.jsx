@@ -251,6 +251,12 @@ export default function Sidebar() {
       roles: ["ADMIN", "CASHIER"]
     },
     {
+      text: "OLT ONU Status",
+      path: "/olt-onu-status",
+      icon: <SettingsInputAntennaOutlined />,
+      roles: ["ADMIN", "CASHIER"]
+    },
+    {
       text: "OLT Dump Scheduler",
       path: "/olt-dump-scheduler",
       icon: <SettingsInputAntennaOutlined />,
