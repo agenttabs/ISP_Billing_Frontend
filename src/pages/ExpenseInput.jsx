@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -15,7 +15,9 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography
+  Typography,
+  useMediaQuery,
+  useTheme
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -137,7 +139,14 @@ export default function ExpenseInput() {
   const { user } = useAuth();
   const userType = String(user?.type || "").toUpperCase();
   const isCashier = userType === "CASHIER";
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
   const [rows, setRows] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
+  const [refreshCount, setRefreshCount] = useState(0);
   const [form, setForm] = useState(defaultForm);
   const [editingId, setEditingId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -146,18 +155,44 @@ export default function ExpenseInput() {
   const [success, setSuccess] = useState("");
   const [search, setSearch] = useState("");
 
-  const loadExpenses = async () => {
-    try {
-      setLoading(true);
-      const { data } = await API.get("/expenses");
-      setRows(Array.isArray(data) ? data : []);
-      setError("");
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to load expenses.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const refreshExpenses = () => setRefreshCount((count) => count + 1);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setListLoading(true);
+    setListError("");
+
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await API.get("/expenses", {
+          params: { page, search: search.trim() },
+          signal: controller.signal,
+          timeout: 20_000
+        });
+        if (controller.signal.aborted) return;
+
+        if (page > 0 && !data.rows.length) {
+          setPage(page - 1);
+          return;
+        }
+
+        setRows(data.rows);
+        setHasNextPage(data.hasNextPage);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setRows([]);
+        setHasNextPage(false);
+        setListError(err.response?.data?.error || "Could not load expenses. Use Refresh to retry.");
+      } finally {
+        if (!controller.signal.aborted) setListLoading(false);
+      }
+    }, search.trim() ? 250 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [page, search, refreshCount]);
 
   const loadTechnicians = async () => {
     try {
@@ -169,40 +204,8 @@ export default function ExpenseInput() {
   };
 
   useEffect(() => {
-    loadExpenses();
     loadTechnicians();
   }, []);
-
-  const filteredRows = useMemo(() => {
-    const keyword = String(search || "").trim().toLowerCase();
-    const scopedRows = isCashier
-      ? rows.filter(
-          (row) =>
-            normalizeLogDateKey(row.LogDate) === getTodayLogDateKey() &&
-            isRowOwnedByUser(row, user)
-        )
-      : rows;
-
-    if (!keyword) {
-      return scopedRows;
-    }
-
-    return scopedRows.filter((row) =>
-      [
-        row.Name,
-        row.Type,
-        row.Invoice,
-        row.LogDate,
-        row.CreatedBy,
-        row.InCharge,
-        row.Amount,
-        row.TechnicianName
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(keyword)
-    );
-  }, [isCashier, rows, search, user]);
 
   const canEditRow = (row) =>
     !isCashier ||
@@ -241,7 +244,8 @@ export default function ExpenseInput() {
       }
 
       resetForm();
-      await loadExpenses();
+      if (!editingId) setPage(0);
+      refreshExpenses();
     } catch (err) {
       setSuccess("");
       setError(err.response?.data?.error || "Failed to save expense.");
@@ -276,7 +280,7 @@ export default function ExpenseInput() {
         resetForm();
       }
       setSuccess("Expense deleted successfully.");
-      await loadExpenses();
+      refreshExpenses();
     } catch (err) {
       setSuccess("");
       setError(err.response?.data?.error || "Failed to delete expense.");
@@ -299,7 +303,7 @@ export default function ExpenseInput() {
             <Button
               variant="outlined"
               startIcon={<ReceiptLongOutlinedIcon />}
-              onClick={loadExpenses}
+              onClick={refreshExpenses}
               sx={{ textTransform: "none", fontWeight: 700 }}
             >
               Refresh
@@ -452,19 +456,82 @@ export default function ExpenseInput() {
               <TextField
                 label="Search"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setPage(0);
+                  setSearch(event.target.value);
+                }}
+                inputProps={{ maxLength: 200 }}
                 placeholder="Name, invoice, in-charge"
                 sx={{ minWidth: { xs: "100%", md: 260 } }}
               />
             </Stack>
 
-            <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.25 }}>
-              {!filteredRows.length ? (
+            {listError && <Alert severity="error" sx={{ mb: 2 }}>{listError}</Alert>}
+            {listLoading ? (
+              <Typography role="status" sx={{ textAlign: "center", py: 2 }}>Loading expenses…</Typography>
+            ) : isDesktop ? (
+            <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Log Date</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Invoice</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Docs</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Technician</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }} align="center">
+                    Action
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center">
+                      No expense records found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => (
+                    <TableRow key={String(row._id)}>
+                      <TableCell>{row.LogDate || "-"}</TableCell>
+                      <TableCell>{row.Invoice || "-"}</TableCell>
+                      <TableCell>{row.Name || "-"}</TableCell>
+                      <TableCell>{row.Type || "-"}</TableCell>
+                      <TableCell>{formatDisplayAmount(row.Amount)}</TableCell>
+                      <TableCell>{row.Docs || "-"}</TableCell>
+                      <TableCell>{row.TechnicianName || "-"}</TableCell>
+                      <TableCell>{row.CreatedBy || row.InCharge || "-"}</TableCell>
+                      <TableCell align="center">
+                        {canEditRow(row) ? (
+                          <IconButton color="primary" onClick={() => handleEdit(row)}>
+                            <EditOutlinedIcon />
+                          </IconButton>
+                        ) : null}
+                        {!isCashier ? (
+                          <IconButton color="error" onClick={() => handleDelete(row._id)}>
+                            <DeleteOutlineIcon />
+                          </IconButton>
+                        ) : null}
+                        {!canEditRow(row) && isCashier ? "-" : null}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            </TableContainer>
+            ) : (
+              <Box sx={{ display: "grid", gap: 1.25 }}>
+              {!rows.length ? (
                 <Typography sx={{ textAlign: "center", color: "#64748b", py: 2 }}>
                   No expense records found.
                 </Typography>
               ) : (
-                filteredRows.map((row) => (
+                rows.map((row) => (
                   <Card
                     key={String(row._id)}
                     sx={{
@@ -543,61 +610,14 @@ export default function ExpenseInput() {
                 ))
               )}
             </Box>
-
-            <TableContainer sx={{ display: { xs: "none", md: "block" }, overflowX: "auto" }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 700 }}>Log Date</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Invoice</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Amount</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Docs</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Technician</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="center">
-                    Action
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {!filteredRows.length ? (
-                  <TableRow>
-                    <TableCell colSpan={9} align="center">
-                      No expense records found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredRows.map((row) => (
-                    <TableRow key={String(row._id)}>
-                      <TableCell>{row.LogDate || "-"}</TableCell>
-                      <TableCell>{row.Invoice || "-"}</TableCell>
-                      <TableCell>{row.Name || "-"}</TableCell>
-                      <TableCell>{row.Type || "-"}</TableCell>
-                      <TableCell>{formatDisplayAmount(row.Amount)}</TableCell>
-                      <TableCell>{row.Docs || "-"}</TableCell>
-                      <TableCell>{row.TechnicianName || "-"}</TableCell>
-                      <TableCell>{row.CreatedBy || row.InCharge || "-"}</TableCell>
-                      <TableCell align="center">
-                        {canEditRow(row) ? (
-                          <IconButton color="primary" onClick={() => handleEdit(row)}>
-                            <EditOutlinedIcon />
-                          </IconButton>
-                        ) : null}
-                        {!isCashier ? (
-                          <IconButton color="error" onClick={() => handleDelete(row._id)}>
-                            <DeleteOutlineIcon />
-                          </IconButton>
-                        ) : null}
-                        {!canEditRow(row) && isCashier ? "-" : null}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            </TableContainer>
+            )}
+            {(page > 0 || hasNextPage) && (
+              <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" sx={{ mt: 2 }}>
+                <Button disabled={listLoading || page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Typography variant="body2">Page {page + 1}</Typography>
+                <Button disabled={listLoading || !hasNextPage} onClick={() => setPage(page + 1)}>Next</Button>
+              </Stack>
+            )}
           </CardContent>
         </Card>
       </Stack>

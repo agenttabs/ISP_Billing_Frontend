@@ -113,6 +113,8 @@ const renderPayrollPrintHtml = ({ rows, cutoffDate }) => {
           <div class="summary-grid">
             <div><span>Monthly Salary</span><strong>${escapeHtml(formatMoney(row.monthlySalary))}</strong></div>
             <div><span>Cutoff Salary</span><strong>${escapeHtml(formatMoney(row.grossSalary))}</strong></div>
+            <div><span>Previous Carryover</span><strong>${escapeHtml(formatMoney(row.previousCashAdvanceCarryOver))}</strong></div>
+            <div><span>New Cash Advances</span><strong>${escapeHtml(formatMoney(row.periodCashAdvanceTotal))}</strong></div>
             <div><span>Cash Advance Deducted</span><strong>${escapeHtml(formatMoney(row.cashAdvanceTotal))}</strong></div>
             <div><span>Carry Over to Next Cutoff</span><strong>${escapeHtml(formatMoney(row.cashAdvanceCarryOver))}</strong></div>
             <div class="net"><span>Net Salary</span><strong>${escapeHtml(formatMoney(row.netSalary))}</strong></div>
@@ -130,6 +132,12 @@ const renderPayrollPrintHtml = ({ rows, cutoffDate }) => {
               </tr>
             </thead>
             <tbody>${advanceRows}</tbody>
+            <tfoot>
+              <tr>
+                <th colspan="4" scope="row">Total Cash Advances</th>
+                <th class="amount">${escapeHtml(formatMoney(row.periodCashAdvanceTotal))}</th>
+              </tr>
+            </tfoot>
           </table>
 
           <div class="signatures">
@@ -202,6 +210,8 @@ function PayrollRow({ row }) {
         <TableCell sx={{ color: "#2563eb", fontWeight: 800 }}>
           {formatMoney(row.grossSalary)}
         </TableCell>
+        <TableCell>{formatMoney(row.previousCashAdvanceCarryOver)}</TableCell>
+        <TableCell>{formatMoney(row.periodCashAdvanceTotal)}</TableCell>
         <TableCell sx={{ color: "#dc2626", fontWeight: 800 }}>
           {formatMoney(row.cashAdvanceTotal)}
         </TableCell>
@@ -213,7 +223,7 @@ function PayrollRow({ row }) {
         </TableCell>
       </TableRow>
       <TableRow>
-        <TableCell colSpan={10} sx={{ p: 0, borderBottom: open ? undefined : 0 }}>
+        <TableCell colSpan={12} sx={{ p: 0, borderBottom: open ? undefined : 0 }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ p: 2, background: "#f8fafc" }}>
               <Typography sx={{ fontWeight: 800, mb: 1 }}>
@@ -250,6 +260,14 @@ function PayrollRow({ row }) {
                       </TableCell>
                     </TableRow>
                   ))}
+                  <TableRow>
+                    <TableCell component="th" scope="row" colSpan={5} sx={{ fontWeight: 800 }}>
+                      Total Cash Advances
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>
+                      {formatMoney(row.periodCashAdvanceTotal)}
+                    </TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </Box>
@@ -301,11 +319,19 @@ function PayrollMobileCard({ row }) {
               <Typography sx={{ color: "#2563eb", fontWeight: 900 }}>{formatMoney(row.grossSalary)}</Typography>
             </Box>
             <Box>
-              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CASH ADVANCE</Typography>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>PREVIOUS CARRYOVER</Typography>
+              <Typography sx={{ fontWeight: 800 }}>{formatMoney(row.previousCashAdvanceCarryOver)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>NEW CASH ADVANCES</Typography>
+              <Typography sx={{ fontWeight: 800 }}>{formatMoney(row.periodCashAdvanceTotal)}</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CASH ADVANCE DEDUCTED</Typography>
               <Typography sx={{ color: "#dc2626", fontWeight: 900 }}>{formatMoney(row.cashAdvanceTotal)}</Typography>
             </Box>
             <Box>
-              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>CARRY OVER</Typography>
+              <Typography sx={{ color: "#64748b", fontSize: "0.63rem", fontWeight: 800 }}>NEXT CARRYOVER</Typography>
               <Typography sx={{ color: "#b45309", fontWeight: 900 }}>{formatMoney(row.cashAdvanceCarryOver)}</Typography>
             </Box>
           </Box>
@@ -337,6 +363,10 @@ function PayrollMobileCard({ row }) {
                   </Typography>
                 </Box>
               ))}
+              <Stack direction="row" justifyContent="space-between" sx={{ borderTop: "1px solid #e2e8f0", pt: 1 }}>
+                <Typography sx={{ fontWeight: 800 }}>Total Cash Advances</Typography>
+                <Typography sx={{ fontWeight: 800 }}>{formatMoney(row.periodCashAdvanceTotal)}</Typography>
+              </Stack>
             </Stack>
           </Collapse>
         </Stack>
@@ -546,15 +576,17 @@ export default function TechnicianPayrollReport() {
                   <TableCell>Cutoff</TableCell>
                   <TableCell>Monthly Salary</TableCell>
                   <TableCell>Cutoff Salary</TableCell>
-                  <TableCell>Cash Advance</TableCell>
-                  <TableCell>Carry Over</TableCell>
+                  <TableCell>Previous Carryover</TableCell>
+                  <TableCell>New Cash Advances</TableCell>
+                  <TableCell>Cash Advance Deducted</TableCell>
+                  <TableCell>Next Carryover</TableCell>
                   <TableCell>Net Salary</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {includedRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={12} align="center">
                       No technician payroll schedule matches this cutoff date.
                     </TableCell>
                   </TableRow>

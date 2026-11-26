@@ -2015,8 +2015,10 @@ function ClientList() {
   const [adjustDueDateDialog, setAdjustDueDateDialog] = useState({
     open: false,
     value: null,
-    row: null
+    row: null,
+    client: null
   });
+  const [adjustDueDateSaving, setAdjustDueDateSaving] = useState(false);
   const mapClientToForm = useCallback((client) => ({
     ...getDefaultNewClientForm(),
     ...client,
@@ -2920,6 +2922,8 @@ function ClientList() {
   };
 
   const handleCloseAdjustDueDateDialog = () => {
+    if (adjustDueDateSaving) return;
+
     setAdjustDueDateDialog({
       open: false,
       value: null,
@@ -2934,35 +2938,13 @@ function ClientList() {
       return;
     }
 
-    try {
-      await API.delete(
-        `/transactions/${deleteHistoryDialog.row._id}`,
-        {
-          params: {
-            source: deleteHistoryDialog.row.HistorySource || "transactions"
-          }
-        }
-      );
-
-      setPaymentHistoryRows((prev) =>
-        prev.filter((row) => row._id !== deleteHistoryDialog.row._id)
-      );
-
-      setAdjustDueDateDialog({
-        open: true,
-        row: deleteHistoryDialog.row,
-        client: selectedClient,
-        value: selectedClient?.DueDate ? dayjs(selectedClient.DueDate) : dayjs()
-      });
-      handleCloseDeleteHistoryDialog();
-    } catch (err) {
-      console.error("DELETE PAYMENT HISTORY ERROR:", err.response?.data || err.message);
-      showMessage(
-        "Delete Failed",
-        err.response?.data?.error || "Failed to delete payment history.",
-        "error"
-      );
-    }
+    setAdjustDueDateDialog({
+      open: true,
+      row: deleteHistoryDialog.row,
+      client: selectedClient,
+      value: selectedClient?.DueDate ? dayjs(selectedClient.DueDate) : dayjs()
+    });
+    handleCloseDeleteHistoryDialog();
   };
 
   const handleSaveAdjustedDueDate = async () => {
@@ -2973,11 +2955,19 @@ function ClientList() {
       return;
     }
 
+    if (!adjustDueDateDialog.row?._id) {
+      showMessage("Delete Failed", "This history record can't be deleted.", "error");
+      return;
+    }
+
     try {
+      setAdjustDueDateSaving(true);
       const dueDateValue = adjustDueDateDialog.value.toDate();
       const subscriptionCover = String(dueDateValue.getDate());
 
-      await API.put(`/clients/${adjustClient._id}/due-date`, {
+      await API.put(`/transactions/${adjustDueDateDialog.row._id}/delete-adjust-due-date`, {
+        clientId: adjustClient._id,
+        source: adjustDueDateDialog.row.HistorySource || "transactions",
         DueDate: dueDateValue.toISOString(),
         SubscriptionCover: subscriptionCover,
         SchedulePastDueOneHour: true
@@ -3006,6 +2996,10 @@ function ClientList() {
         };
       }
 
+      setPaymentHistoryRows((prev) =>
+        prev.filter((row) => row._id !== adjustDueDateDialog.row._id)
+      );
+
       setSelectedClient((prev) =>
         prev && String(prev._id || "") === String(adjustClient._id || "")
           ? {
@@ -3033,6 +3027,8 @@ function ClientList() {
         err.response?.data?.error || "Failed to update the due date.",
         "error"
       );
+    } finally {
+      setAdjustDueDateSaving(false);
     }
   };
 
@@ -9113,7 +9109,7 @@ function ClientList() {
             Delete Payment History
           </Alert>
           <Typography sx={{ color: "#334155" }}>
-            This will remove the selected payment history record. After deletion, please adjust the client due date.
+            Choose the corrected due date before deleting this payment history record.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -9126,7 +9122,7 @@ function ClientList() {
             onClick={handleDeletePaymentHistory}
             sx={{ textTransform: "none", fontWeight: 700 }}
           >
-            Delete
+            Continue
           </Button>
         </DialogActions>
       </Dialog>
@@ -9142,7 +9138,7 @@ function ClientList() {
             Adjust Due Date
           </Alert>
           <Typography sx={{ color: "#334155", mb: 2 }}>
-            The payment history was deleted. Please adjust the client due date now.
+            Saving will delete the selected payment history, adjust the client due date, and recreate the MikroTik scheduler.
           </Typography>
 
           <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -9164,15 +9160,16 @@ function ClientList() {
           </LocalizationProvider>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseAdjustDueDateDialog} sx={{ textTransform: "none", fontWeight: 700 }}>
+          <Button onClick={handleCloseAdjustDueDateDialog} disabled={adjustDueDateSaving} sx={{ textTransform: "none", fontWeight: 700 }}>
             Cancel
           </Button>
           <Button
             variant="contained"
             onClick={handleSaveAdjustedDueDate}
+            disabled={adjustDueDateSaving}
             sx={{ textTransform: "none", fontWeight: 700 }}
           >
-            Save Due Date
+            {adjustDueDateSaving ? "Saving..." : "Save Due Date"}
           </Button>
         </DialogActions>
       </Dialog>

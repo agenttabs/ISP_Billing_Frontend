@@ -27,14 +27,19 @@ import SmsOutlinedIcon from "@mui/icons-material/SmsOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 
+const zitaSmsUrl = "https://my.zitasms.com/api/v1/sms-send.php";
+const legacyZitaSmsUrl = /^https?:\/\/(?:www\.)?zitasms\.com\/api\/send\/sms\/?$/i;
+const usesZitaV1 = (url) => !url?.trim() || legacyZitaSmsUrl.test(url.trim()) ||
+  /^https:\/\/my\.zitasms\.com\/api\/v1\/sms-send\.php(?:[?#]|$)/i.test(url.trim());
+
 const defaultForm = {
   ServiceName: "ZITASMS",
   Status: "NO",
-  ApiUrl: "https://www.zitasms.com/api/send/sms",
+  ApiUrl: zitaSmsUrl,
   Secret: "",
   Mode: "devices",
   Device: "",
-  Sim: "1"
+  Sim: "sim1"
 };
 
 const defaultTestForm = {
@@ -104,7 +109,12 @@ export default function SMSGateway() {
         ...testForm
       });
 
-      setSuccess(data?.message || "Test SMS sent successfully.");
+      const gatewayResponse = data?.parsedResponse;
+      setSuccess(
+        gatewayResponse?.status === "scheduled"
+          ? gatewayResponse.message || "Test SMS scheduled."
+          : data?.message || "Test SMS sent successfully."
+      );
       setTestResult(data?.response || "");
       setTestDialogOpen(false);
     } catch (err) {
@@ -156,11 +166,13 @@ export default function SMSGateway() {
     setForm({
       ServiceName: row.ServiceName || "",
       Status: String(row.Status || "NO").toUpperCase(),
-      ApiUrl: row.ApiUrl || "",
+      ApiUrl: !row.ApiUrl || legacyZitaSmsUrl.test(row.ApiUrl) ? zitaSmsUrl : row.ApiUrl,
       Secret: row.Secret || "",
       Mode: row.Mode || "devices",
       Device: row.Device || "",
-      Sim: row.Sim || "1"
+      Sim: usesZitaV1(row.ApiUrl)
+        ? (row.Sim || "sim1").toLowerCase().replace(/^([12])$/, "sim$1")
+        : row.Sim || "1"
     });
     setError("");
     setSuccess("");
@@ -240,7 +252,8 @@ export default function SMSGateway() {
                   fullWidth
                 />
                 <TextField
-                  label="Secret"
+                  label={usesZitaV1(form.ApiUrl) ? "API Key" : "Secret"}
+                  type="password"
                   value={form.Secret}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, Secret: event.target.value }))
@@ -250,16 +263,18 @@ export default function SMSGateway() {
               </Stack>
 
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                {!usesZitaV1(form.ApiUrl) && (
+                  <TextField
+                    label="Mode"
+                    value={form.Mode}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, Mode: event.target.value }))
+                    }
+                    fullWidth
+                  />
+                )}
                 <TextField
-                  label="Mode"
-                  value={form.Mode}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, Mode: event.target.value }))
-                  }
-                  fullWidth
-                />
-                <TextField
-                  label="Device"
+                  label={usesZitaV1(form.ApiUrl) ? "Device ID" : "Device"}
                   value={form.Device}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, Device: event.target.value }))
@@ -268,6 +283,7 @@ export default function SMSGateway() {
                 />
                 <TextField
                   label="SIM"
+                  helperText={usesZitaV1(form.ApiUrl) ? "Enter sim1 or sim2" : undefined}
                   value={form.Sim}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, Sim: event.target.value }))
@@ -460,20 +476,24 @@ export default function SMSGateway() {
             />
             <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
               <TextField
-                label="Device"
+                label={usesZitaV1(testGateway?.ApiUrl) ? "Device ID" : "Device"}
                 value={testGateway?.Device || ""}
                 fullWidth
                 InputProps={{ readOnly: true }}
               />
-              <TextField
-                label="Mode"
-                value={testGateway?.Mode || ""}
-                fullWidth
-                InputProps={{ readOnly: true }}
-              />
+              {!usesZitaV1(testGateway?.ApiUrl) && (
+                <TextField
+                  label="Mode"
+                  value={testGateway?.Mode || ""}
+                  fullWidth
+                  InputProps={{ readOnly: true }}
+                />
+              )}
               <TextField
                 label="SIM"
-                value={testGateway?.Sim || "1"}
+                value={usesZitaV1(testGateway?.ApiUrl)
+                  ? (testGateway?.Sim || "sim1").toLowerCase().replace(/^([12])$/, "sim$1")
+                  : testGateway?.Sim || "1"}
                 fullWidth
                 InputProps={{ readOnly: true }}
               />

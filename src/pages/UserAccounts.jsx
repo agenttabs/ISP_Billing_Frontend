@@ -7,6 +7,10 @@ import {
   CardContent,
   Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   IconButton,
   MenuItem,
@@ -21,6 +25,7 @@ import {
   Typography
 } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
@@ -109,6 +114,13 @@ export default function UserAccounts() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    user: null,
+    adminPassword: ""
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const loadUsers = async () => {
     try {
@@ -179,6 +191,7 @@ export default function UserAccounts() {
       restriction: user.Restriction || "Default",
       scheduleDays: getUserScheduleDays(user)
     });
+    setDeleteError("");
     setError("");
     setSuccess("");
   };
@@ -198,6 +211,74 @@ export default function UserAccounts() {
     setForm(defaultForm);
     setError("");
     setSuccess("");
+  };
+
+  const openDeleteDialog = (user) => {
+    setDeleteDialog({
+      open: true,
+      user,
+      adminPassword: ""
+    });
+    setError("");
+    setSuccess("");
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleteLoading) return;
+
+    setDeleteDialog({
+      open: false,
+      user: null,
+      adminPassword: ""
+    });
+    setDeleteError("");
+  };
+
+  const handleDeleteUser = async () => {
+    const targetUser = deleteDialog.user;
+
+    if (!targetUser?.ID) {
+      setDeleteError("User record cannot be deleted.");
+      return;
+    }
+
+    if (!String(deleteDialog.adminPassword || "").trim()) {
+      setDeleteError("Admin password is required before deleting a user.");
+      return;
+    }
+
+    try {
+      setDeleteLoading(true);
+      setDeleteError("");
+      const { data } = await API.delete(`/auth/users/${targetUser.ID}`, {
+        data: {
+          adminPassword: deleteDialog.adminPassword
+        }
+      });
+
+      setUsers((prev) =>
+        prev.filter((user) => String(user.ID) !== String(targetUser.ID))
+      );
+
+      if (String(editingId) === String(targetUser.ID)) {
+        setEditingId("");
+        setForm(defaultForm);
+      }
+
+      setSuccess(data?.message || "User deleted successfully.");
+      setError("");
+      setDeleteError("");
+      setDeleteDialog({
+        open: false,
+        user: null,
+        adminPassword: ""
+      });
+    } catch (err) {
+      setSuccess("");
+      setDeleteError(err.response?.data?.error || "Failed to delete user.");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -447,9 +528,14 @@ export default function UserAccounts() {
                             {accountUser.Username || "-"} | ID {accountUser.ID || "-"}
                           </Typography>
                         </Box>
-                        <IconButton color="primary" onClick={() => handleEdit(accountUser)}>
-                          <EditOutlinedIcon />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton color="primary" onClick={() => handleEdit(accountUser)}>
+                            <EditOutlinedIcon />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => openDeleteDialog(accountUser)}>
+                            <DeleteOutlineOutlinedIcon />
+                          </IconButton>
+                        </Stack>
                       </Stack>
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         <Chip size="small" label={accountUser.Type || "-"} color="primary" variant="outlined" />
@@ -502,7 +588,7 @@ export default function UserAccounts() {
                   <TableCell>Payroll</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Contact</TableCell>
-                  <TableCell align="center">Edit</TableCell>
+                  <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -540,9 +626,14 @@ export default function UserAccounts() {
                     <TableCell>{user.Email || "-"}</TableCell>
                     <TableCell>{user.Contact || "-"}</TableCell>
                     <TableCell align="center">
-                      <IconButton color="primary" onClick={() => handleEdit(user)}>
-                        <EditOutlinedIcon />
-                      </IconButton>
+                      <Stack direction="row" justifyContent="center" spacing={0.5}>
+                        <IconButton color="primary" onClick={() => handleEdit(user)}>
+                          <EditOutlinedIcon />
+                        </IconButton>
+                        <IconButton color="error" onClick={() => openDeleteDialog(user)}>
+                          <DeleteOutlineOutlinedIcon />
+                        </IconButton>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -552,6 +643,44 @@ export default function UserAccounts() {
           </CardContent>
         </Card>
       </Stack>
+
+      <Dialog open={deleteDialog.open} onClose={closeDeleteDialog} fullWidth maxWidth="xs">
+        <DialogTitle>Delete User</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              This will permanently delete {deleteDialog.user?.Name || "this user"}.
+            </Alert>
+            {deleteError ? <Alert severity="error">{deleteError}</Alert> : null}
+            <TextField
+              label="Admin Password"
+              type="password"
+              value={deleteDialog.adminPassword}
+              onChange={(event) =>
+                setDeleteDialog((prev) => ({
+                  ...prev,
+                  adminPassword: event.target.value
+                }))
+              }
+              fullWidth
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDeleteDialog} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteUser}
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? "Deleting..." : "Delete User"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
