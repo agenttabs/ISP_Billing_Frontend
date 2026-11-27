@@ -15,6 +15,7 @@ import ClientList from "./pages/client";
 import Dashboard from "./pages/DashboardPage";
 import EmailNotification from "./pages/EmailNotification";
 import ExpenseInput from "./pages/ExpenseInput";
+import EmployeeAbsence from "./pages/EmployeeAbsence";
 import Installation from "./pages/Installation";
 import Login from "./pages/Login";
 import MikrotikChecker from "./pages/MikrotikChecker";
@@ -32,6 +33,7 @@ import ReportTransactions from "./pages/ReportTransactions";
 import RepairInformation from "./pages/RepairInformation";
 import SMSBatchPrograms from "./pages/SMSBatchPrograms";
 import SMSGateway from "./pages/SMSGateway";
+import SmsManager from "./pages/SmsManager";
 import SMSRecepients from "./pages/SMSRecepients";
 import SystemDiagnostics from "./pages/SystemDiagnostics";
 import SystemSettings from "./pages/SystemSettings";
@@ -91,6 +93,10 @@ function App() {
           <Route path="/" element={<HomeRoute />} />
 
           <Route element={<RoleRoute allowedRoles={["ADMIN", "CASHIER"]} />}>
+            <Route path="/absences" element={<EmployeeAbsence />} />
+          </Route>
+
+          <Route element={<RoleRoute allowedRoles={["ADMIN", "CASHIER"]} />}>
             <Route path="/clients" element={<ClientList />} />
             <Route path="/clients/new" element={<ClientList />} />
             <Route path="/clients/:id/edit" element={<ClientList />} />
@@ -114,6 +120,7 @@ function App() {
             <Route path="/account-users" element={<UserAccounts />} />
             <Route path="/sms-recepients" element={<SMSRecepients />} />
             <Route path="/sms-collection" element={<SMSGateway />} />
+            <Route path="/sms-manager" element={<SmsManager />} />
             <Route path="/sms-batch-programs" element={<SMSBatchPrograms />} />
             <Route path="/email-notification" element={<EmailNotification />} />
             <Route path="/netplans-maintenance" element={<NetplanMaintenance />} />

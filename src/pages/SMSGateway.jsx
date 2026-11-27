@@ -26,6 +26,7 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SmsOutlinedIcon from "@mui/icons-material/SmsOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
+import SmsProviderSettings from "./SmsProviderSettings";
 
 const zitaSmsUrl = "https://my.zitasms.com/api/v1/sms-send-get.php";
 const legacyZitaSmsUrl = /^https?:\/\/(?:www\.)?zitasms\.com\/api\/send\/sms\/?$/i;
@@ -214,6 +215,8 @@ export default function SMSGateway() {
         {error ? <Alert severity="error">{error}</Alert> : null}
         {success ? <Alert severity="success">{success}</Alert> : null}
         {testResult ? <Alert severity="info">API Return: {testResult}</Alert> : null}
+
+        <SmsProviderSettings />
 
         <Card sx={{ borderRadius: 4 }}>
           <CardContent sx={{ p: 3 }}>

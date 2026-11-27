@@ -46,6 +46,7 @@ import {
   SettingsSuggestOutlined,
   FmdGoodOutlined,
   HistoryOutlined,
+  EventBusyOutlined,
   ExpandLess,
   ExpandMore
 } from "@mui/icons-material";
@@ -84,7 +85,8 @@ export default function Sidebar() {
   const mainMenu = [
     { text: "Dashboard", path: "/", icon: <Dashboard />, roles: ["ADMIN", "CASHIER"] },
     { text: "Clients", path: "/clients", icon: <People />, roles: ["ADMIN", "CASHIER"] },
-    { text: "Client View", path: "/technician/clients", icon: <People />, roles: ["ADMIN", "TECHNICIAN"] }
+    { text: "Client View", path: "/technician/clients", icon: <People />, roles: ["ADMIN", "TECHNICIAN"] },
+    { text: "Attendance", path: "/absences", icon: <EventBusyOutlined />, roles: ["ADMIN", "CASHIER"] }
   ].filter((item) => item.roles.includes(userType));
 
   const reportMenu = [
@@ -209,6 +211,12 @@ export default function Sidebar() {
       text: "SMS Collection",
       path: "/sms-collection",
       icon: <SettingsInputAntennaOutlined />,
+      roles: ["ADMIN"]
+    },
+    {
+      text: "SMS Manager",
+      path: "/sms-manager",
+      icon: <HistoryOutlined />,
       roles: ["ADMIN"]
     },
     {
