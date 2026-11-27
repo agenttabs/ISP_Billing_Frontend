@@ -27,10 +27,10 @@ import SmsOutlinedIcon from "@mui/icons-material/SmsOutlined";
 import API from "../api/api";
 import PageHeader from "../layout/PageHeader";
 
-const zitaSmsUrl = "https://my.zitasms.com/api/v1/sms-send.php";
+const zitaSmsUrl = "https://my.zitasms.com/api/v1/sms-send-get.php";
 const legacyZitaSmsUrl = /^https?:\/\/(?:www\.)?zitasms\.com\/api\/send\/sms\/?$/i;
 const usesZitaV1 = (url) => !url?.trim() || legacyZitaSmsUrl.test(url.trim()) ||
-  /^https:\/\/my\.zitasms\.com\/api\/v1\/sms-send\.php(?:[?#]|$)/i.test(url.trim());
+  /^https:\/\/my\.zitasms\.com\/api\/v1\/sms-send(?:-get)?\.php(?:[?#]|$)/i.test(url.trim());
 
 const defaultForm = {
   ServiceName: "ZITASMS",
@@ -166,7 +166,7 @@ export default function SMSGateway() {
     setForm({
       ServiceName: row.ServiceName || "",
       Status: String(row.Status || "NO").toUpperCase(),
-      ApiUrl: !row.ApiUrl || legacyZitaSmsUrl.test(row.ApiUrl) ? zitaSmsUrl : row.ApiUrl,
+      ApiUrl: usesZitaV1(row.ApiUrl) ? zitaSmsUrl : row.ApiUrl,
       Secret: row.Secret || "",
       Mode: row.Mode || "devices",
       Device: row.Device || "",
@@ -245,6 +245,7 @@ export default function SMSGateway() {
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                 <TextField
                   label="API URL"
+                  helperText={usesZitaV1(form.ApiUrl) ? "Enter the endpoint URL. Put the key in API Key." : undefined}
                   value={form.ApiUrl}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, ApiUrl: event.target.value }))
